@@ -125,25 +125,37 @@
             height: 144px;
             background: #000;
             outline: none;
+            border: none;
             display: block;
             flex-shrink: 0;
-            /* Avoid subpixel positioning from parent flex/grid */
-            margin: 0 auto;
+            margin: 0;
+            padding: 0;
+            /* content-box: style width/height == bitmap area (global * is border-box) */
+            box-sizing: content-box !important;
+            vertical-align: top;
         }
 
-        /* Screen frame hugs the integer-scaled canvas (width/height set in JS). */
+        /* Screen frame hugs the canvas exactly. Border must NOT eat into the
+           content box (global * { box-sizing: border-box } would clip 1px on
+           the right and bottom of the GB screen). */
         #gb-screen-wrap {
             position: relative;
             width: 160px;   /* overwritten by JS to match canvas CSS size */
             height: 144px;
             background: #000;
-            border-radius: 0.5rem;
+            /* No border-radius on the clip box — it shaves corner pixels. */
+            border-radius: 0;
             overflow: hidden;
-            border: 1px solid #27272a;
+            /* outline draws outside the box; does not shrink content. */
+            outline: 1px solid #27272a;
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
             display: block;
             margin: 0 auto;
+            padding: 0;
+            border: none;
             flex-shrink: 0;
+            box-sizing: content-box !important;
+            line-height: 0; /* kill any residual inline gap under the canvas */
         }
 
         /* Chassis shrink-wraps to the screen + controls (not a fixed max-width box). */
@@ -1142,20 +1154,25 @@
 
             const bufW = 160 * deviceScale;
             const bufH = 144 * deviceScale;
+            // Prefer CSS sizes that map cleanly; avoid sub-pixel layout which
+            // can clip a device pixel on the right/bottom edge.
             const cssW = bufW / dpr;
             const cssH = bufH / dpr;
+            const cssWStr = (Math.round(cssW * 1000) / 1000) + 'px';
+            const cssHStr = (Math.round(cssH * 1000) / 1000) + 'px';
 
             if (deviceScale === _lastDeviceScale &&
                 canvas.width === bufW &&
-                canvas.style.width === cssW + 'px') {
+                canvas.style.width === cssWStr) {
                 return;
             }
             _lastDeviceScale = deviceScale;
 
-            canvas.style.width = cssW + 'px';
-            canvas.style.height = cssH + 'px';
-            wrap.style.width = cssW + 'px';
-            wrap.style.height = cssH + 'px';
+            canvas.style.width = cssWStr;
+            canvas.style.height = cssHStr;
+            // Wrap content box == canvas size (content-box + no border).
+            wrap.style.width = cssWStr;
+            wrap.style.height = cssHStr;
 
             if (canvas.width !== bufW || canvas.height !== bufH) {
                 canvas.width = bufW;
@@ -1167,8 +1184,7 @@
                 _displayCtx = canvas.getContext('2d', { alpha: false });
             }
             disableSmoothing(_displayCtx);
-
-            }
+        }
 
         function blitFrame(frameData) {
             const { canvas: src, ctx: srcCtx } = getFrameSrc();
