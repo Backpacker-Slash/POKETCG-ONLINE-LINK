@@ -96,11 +96,13 @@
                 inset 0 3px 10px rgba(0, 0, 0, 0.95),
                 0 1px 1px rgba(255, 255, 255, 0.08);
             position: relative;
-            overflow: hidden;
+            /* visible: rounded overflow:hidden was clipping screen edge pixels */
+            overflow: visible;
             width: fit-content;
             max-width: 100%;
             margin-left: auto;
             margin-right: auto;
+            padding: 0.6rem;
         }
 
         /* Acrylic screen glare streak */
@@ -167,24 +169,29 @@
             padding: 0.75rem;
         }
 
-        /* Phones: minimal padding so integer scale 2+ can use almost full width.
-           (360 CSS-wide phone → 320px screen at ×2, not stuck at ×1 from padding.) */
+        /* Phones: chassis/bezel hug the integer-scaled screen (fit-content).
+           Do NOT force width:100% + max-width:100% on the wrap — that shrinks
+           the clip box below the canvas size and clips ~1–2px on the right. */
         @media (max-width: 1023px) {
             #gb-chassis {
                 padding: 0.4rem !important;
-                width: 100%;
-                max-width: 100%;
+                width: fit-content;
+                max-width: calc(100% - 4px);
                 box-sizing: border-box;
             }
             .gb-screen-bezel {
-                padding: 0.4rem !important;
-                width: 100%;
+                padding: 0.35rem !important;
+                width: fit-content;
                 max-width: 100%;
                 box-sizing: border-box;
+                /* Bezel must not clip the screen; wrap handles its own bounds. */
+                overflow: visible;
             }
             #gb-screen-wrap {
-                /* JS still sets exact pixel size; this just allows centering */
-                max-width: 100%;
+                max-width: none;
+            }
+            #gb-canvas {
+                max-width: none;
             }
         }
 
@@ -701,7 +708,7 @@
             <div id="gb-chassis" class="gb-chassis relative select-none">
                 
                 <!-- Game Boy Screen Bezel -->
-                <div class="gb-screen-bezel relative flex flex-col items-center" style="padding: 0.6rem;">
+                <div class="gb-screen-bezel relative flex flex-col items-center">
                     
                     <!-- Top bezel accents: Power LED & Stereo indicator -->
                     <div class="w-full flex items-center justify-between text-[10px] text-zinc-500 font-sans font-bold px-1 mb-2">
@@ -1133,7 +1140,11 @@
 
             let availCssW, availCssH;
             if (isMobile) {
-                availCssW = Math.max(160, vw - 4 - 12);
+                // Leave room for body gutter + chassis pad + bezel pad + outline
+                // so the chosen scale never exceeds the visible content width
+                // (otherwise max-width/overflow parents clip the right edge).
+                const sideChrome = 4 + 8 + 8 + 4; // body + chassis + bezel + outline
+                availCssW = Math.max(160, vw - sideChrome);
                 const reservedY = 52 + 44 + 190 + 8;
                 availCssH = Math.max(144, vh - reservedY);
             } else {
