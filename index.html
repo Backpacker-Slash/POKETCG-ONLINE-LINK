@@ -1303,6 +1303,10 @@
             const eNew = getExport('emulator_new_simple');
             emulatorPtr = eNew(romDataPtr, size, audioCtx.sampleRate, 4096, 2);
 
+            // Reset wall-clock emulation timing for the new machine.
+            lastEmulationTime = 0;
+            leftoverTicks = 0;
+
             if (savBuffer && savBuffer.byteLength > 0) {
                 const extRamFileNew = getExport('ext_ram_file_data_new');
                 const getFileDataPtr = getExport('get_file_data_ptr');
@@ -1796,7 +1800,17 @@
         // ============================================================
         // MAIN EMULATION LOOP & BACKGROUND WATCHDOG
         // ============================================================
+        // IMPORTANT: requestAnimationFrame is tied to the display refresh rate.
+        // A desktop monitor can run at 120/144/165Hz, while the Game Boy must
+        // always run at its real ~59.7Hz cadence.  Advancing exactly one GB
+        // frame per rAF makes the emulator run too fast on high-refresh displays
+        // and causes the audio queue to accumulate delay over time.
+        // Use elapsed wall-clock time instead, like binjgb's reference loop.
+        const CPU_TICKS_PER_SECOND = 4194304;
+        const MAX_UPDATE_SEC = 5 / 60;
         let lastTickTime = performance.now();
+        let lastEmulationTime = 0;
+        let leftoverTicks = 0;
         let lastPlayTimeTick = 0;
 
         function updatePlayTimeClock() {
@@ -1834,18 +1848,59 @@
         function stepEmulator() {
             if (!module || !emulatorPtr) return;
 
+            const nowSec = performance.now() / 1000;
+            let deltaSec;
+
+            if (!lastEmulationTime) {
+                // Start at the real Game Boy cadence rather than depending on
+                // whether the first rAF happened early or late.
+                deltaSec = 1 / 60;
+            } else {
+                deltaSec = Math.max(nowSec - lastEmulationTime, 0);
+            }
+            lastEmulationTime = nowSec;
+
+            // Prevent a hidden/background tab or a brief stall from trying to
+            // emulate seconds of Game Boy time in one call.
+            deltaSec = Math.min(deltaSec, MAX_UPDATE_SEC);
+
             flushJoypadStates();
 
             const runUntil = getExport('emulator_run_until_f64');
             const getTicks = getExport('emulator_get_ticks_f64');
-            const target = getTicks(emulatorPtr) + 70224;
+            if (!runUntil || !getTicks) return;
 
-            while (getTicks(emulatorPtr) < target) {
-                const res = runUntil(emulatorPtr, target);
+            const deltaTicks = deltaSec * CPU_TICKS_PER_SECOND;
+            const runUntilTicks = getTicks(emulatorPtr) + deltaTicks - leftoverTicks;
+
+            // emulator_run_until_f64 returns at frame/audio boundaries, so this
+            // loop may run more than once on a slower frame. Keep the RAM/link
+            // processing at those boundaries while still advancing at real time.
+            while (getTicks(emulatorPtr) < runUntilTicks) {
+                const res = runUntil(emulatorPtr, runUntilTicks);
+
                 if ((res & 2) && audio) audio.push();
+
+                if (res & 1) {
+                    // New Game Boy frame reached. Process link/RAM state here so
+                    // catch-up frames on a high-refresh/slow render loop do not
+                    // skip intermediate synchronization points.
+                    updatePlayTimeClock();
+                    syncRamLogic();
+                    handleSerialSendQueue();
+                    processIncomingSerialQueue();
+                    handleSerialPacketState();
+                }
+
                 if (res & 4) break;
             }
 
+            // Preserve the fractional-tick remainder, matching the reference
+            // implementation's leftoverTicks behavior and preventing long-term
+            // timing drift.
+            leftoverTicks = (getTicks(emulatorPtr) - runUntilTicks) | 0;
+
+            // These also need to run when less than a full GB frame elapsed.
             updatePlayTimeClock();
             syncRamLogic();
             handleSerialSendQueue();
