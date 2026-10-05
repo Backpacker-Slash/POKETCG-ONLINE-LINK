@@ -973,6 +973,11 @@
         // FIFO Queue for serial packets
         const incomingSerialQueue = [];
 
+        // Link liveness (bye on unload + heartbeat fallback)
+        let linkAlive = false;
+        let lastPeerPongAt = 0;
+        let heartbeatTimer = null;
+
         /** Soft-reset link handshake after emulator re-init. Keeps PeerJS open. Ready always → 0. */
         function resetLinkSyncState({ notifyPeer = false } = {}) {
             deckSynced = false;
@@ -984,7 +989,6 @@
 
             const wram = getWram();
             if (wram) {
-                // Re-apply opponent name/avatar only — ready is duel state and must be 0
                 if (cachedOppRawName && cachedOppRawName.length > 0) {
                     writeOpponentNameBytes(cachedOppRawName);
                 } else if (remotePlayerName && remotePlayerName !== 'OPPONENT' && remotePlayerName !== 'NONE') {
@@ -1005,6 +1009,70 @@
             if (notifyPeer && connection?.open) {
                 connection.send({ type: 'peer_soft_reset' });
             }
+        }
+
+        function clearLinkCaches() {
+            cachedOppRawName = null;
+            cachedOppAvatar = null;
+            deckSynced = false;
+            boardSetupSynced = false;
+            lastP1State = null;
+            incomingSerialQueue.length = 0;
+            remotePlayerName = 'OPPONENT';
+            const nameTag = $('opp-name-tag');
+            if (nameTag) nameTag.innerText = 'NONE';
+            const p1Flag = $('p1-flag');
+            const p2Flag = $('p2-flag');
+            if (p1Flag) p1Flag.className = 'w-3 h-3 rounded-full bg-slate-700';
+            if (p2Flag) p2Flag.className = 'w-3 h-3 rounded-full bg-slate-700';
+        }
+
+        function stopHeartbeat() {
+            if (heartbeatTimer) {
+                clearInterval(heartbeatTimer);
+                heartbeatTimer = null;
+            }
+        }
+
+        function startHeartbeat() {
+            stopHeartbeat();
+            lastPeerPongAt = performance.now();
+            heartbeatTimer = setInterval(() => {
+                if (!connection?.open || !linkAlive) return;
+                try {
+                    connection.send({ type: 'ping', t: Date.now() });
+                } catch (_) {}
+                // No pong for ~8s → treat as gone (covers crash / killed tab without unload)
+                if (performance.now() - lastPeerPongAt > 8000) {
+                    handlePartnerGone('Partner timed out (no heartbeat).');
+                }
+            }, 2500);
+        }
+
+        function handlePartnerGone(reason) {
+            if (!linkAlive && !connection) return;
+            linkAlive = false;
+            stopHeartbeat();
+            const wasConn = connection;
+            connection = null;
+            try { wasConn?.close(); } catch (_) {}
+            clearLinkCaches();
+            setConnectionStatus('PARTNER DISCONNECTED', 'text-orange-400 font-bold uppercase');
+            addChatMessage('SYSTEM', reason || 'Peer connection closed.');
+        }
+
+        /** Best-effort goodbye so the other side updates Status immediately on tab close. */
+        function sendByeAndClose() {
+            if (!connection) return;
+            try {
+                if (connection.open) {
+                    connection.send({ type: 'bye' });
+                }
+            } catch (_) {}
+            try { connection.close(); } catch (_) {}
+            linkAlive = false;
+            stopHeartbeat();
+            connection = null;
         }
 
         // ============================================================
@@ -2208,6 +2276,13 @@
                     saveSramToStorage(sram);
                 }
             }
+            // Tell partner we are leaving so their Status leaves "LINKED" immediately
+            sendByeAndClose();
+        });
+
+        // pagehide is more reliable than beforeunload on mobile / bfcache
+        window.addEventListener('pagehide', () => {
+            sendByeAndClose();
         });
 
         // ============================================================
@@ -2312,7 +2387,6 @@
                 // Soft reset: rebuild emulator only. PeerJS connection stays open.
                 await initEmulator(currentRomBuffer, savBuf);
                 resetAllButtons();
-                // Name/avatar restored; ready forced to 0; peer notified to clear our ready.
                 resetLinkSyncState({ notifyPeer: true });
                 if (connection?.open) {
                     const myName = getLocalPlayerName();
@@ -2475,12 +2549,20 @@
         // CONNECTION SETUP & MESSAGE ROUTER
         // ============================================================
         function setupConnection(conn) {
+            // Replace any previous data channel
+            if (connection && connection !== conn) {
+                try { connection.close(); } catch (_) {}
+            }
             connection = conn;
+            linkAlive = false;
             setConnectionStatus('CONNECTING');
 
             conn.on('open', () => {
+                linkAlive = true;
+                lastPeerPongAt = performance.now();
                 setConnectionStatus('LINKED', 'text-green-500 font-bold uppercase');
                 addChatMessage('SYSTEM', 'Peer connection established.');
+                startHeartbeat();
 
                 const myName = getLocalPlayerName();
                 const rawName = readRawPlayerName();
@@ -2496,6 +2578,21 @@
             conn.on('data', d => {
                 if (!d?.type) return;
 
+                if (d.type === 'bye') {
+                    handlePartnerGone('Partner closed the window.');
+                    return;
+                }
+
+                if (d.type === 'ping') {
+                    try { conn.send({ type: 'pong', t: d.t }); } catch (_) {}
+                    return;
+                }
+
+                if (d.type === 'pong') {
+                    lastPeerPongAt = performance.now();
+                    return;
+                }
+
                 if (d.type === 'hello' || d.type === 'player_info') {
                     if (d.rawName && Array.isArray(d.rawName)) {
                         cachedOppRawName = d.rawName.slice();
@@ -2509,7 +2606,6 @@
                 }
 
                 if (d.type === 'peer_soft_reset') {
-                    // Opponent rebuilt emulator; keep PeerJS. Clear their ready on our side.
                     deckSynced = false;
                     boardSetupSynced = false;
                     lastP1State = null;
@@ -2520,7 +2616,6 @@
                     }
                     const p2Flag = $('p2-flag');
                     if (p2Flag) p2Flag.className = 'w-3 h-3 rounded-full bg-slate-700';
-                    // Re-broadcast our current ready (may be 0 after our own reset, or still set)
                     if (wram && connection?.open) {
                         const myReady = wram[OFFSET_P1_READY] | 0;
                         connection.send({
@@ -2616,18 +2711,9 @@
             });
 
             conn.on('close', () => {
-                if (connection === conn) connection = null;
-                cachedOppRawName = null;
-                cachedOppAvatar = null;
-                deckSynced = false;
-                boardSetupSynced = false;
-                lastP1State = null;
-                incomingSerialQueue.length = 0;
-                setConnectionStatus('PARTNER DISCONNECTED', 'text-orange-400 font-bold uppercase');
-                addChatMessage('SYSTEM', 'Peer connection closed.');
-                const nameTag = $('opp-name-tag');
-                if (nameTag) nameTag.innerText = 'NONE';
-                remotePlayerName = 'OPPONENT';
+                if (connection === conn || linkAlive) {
+                    handlePartnerGone('Peer connection closed.');
+                }
             });
 
             conn.on('error', () => {
