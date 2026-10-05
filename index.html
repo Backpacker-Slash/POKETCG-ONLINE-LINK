@@ -101,12 +101,13 @@
                 inset 0 3px 10px rgba(0, 0, 0, 0.95),
                 0 1px 1px rgba(255, 255, 255, 0.08);
             position: relative;
-            overflow: visible;
+            overflow: hidden;
             width: fit-content;
             max-width: 100%;
             margin-left: auto;
             margin-right: auto;
             padding: 0.6rem;
+            box-sizing: border-box;
         }
 
         /* Acrylic screen glare streak */
@@ -133,7 +134,7 @@
             border: none;
             display: block;
             flex-shrink: 0;
-            margin: 0;
+            margin: 0 auto;
             padding: 0;
             box-sizing: content-box !important;
             vertical-align: top;
@@ -149,7 +150,9 @@
             overflow: hidden;
             outline: 1px solid #27272a;
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-            display: block;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             margin: 0 auto;
             padding: 0;
             border: none;
@@ -161,22 +164,24 @@
         @media (max-width: 1023px) {
             #gb-chassis {
                 padding: 0.4rem !important;
-                width: fit-content;
-                max-width: calc(100% - 4px);
+                width: 100%;
+                max-width: 100%;
                 box-sizing: border-box;
             }
             .gb-screen-bezel {
-                padding: 0.35rem !important;
-                width: fit-content;
+                padding: 0.4rem !important;
+                width: 100%;
                 max-width: 100%;
                 box-sizing: border-box;
-                overflow: visible;
+                overflow: hidden;
             }
             #gb-screen-wrap {
-                max-width: none;
+                max-width: 100%;
+                margin: 0 auto;
             }
             #gb-canvas {
-                max-width: none;
+                max-width: 100%;
+                margin: 0 auto;
             }
         }
 
@@ -740,7 +745,7 @@
                             </span>
                         </div>
                         <!-- Angled Speaker Grille Slits -->
-                        <div class="flex gap-1 items-center rotate-[-25deg] opacity-60">
+                        <div class="flex gap-1 items-center rotate-[-25deg] opacity-60 mr-2">
                             <div class="w-1 h-3 bg-zinc-700 rounded-full"></div>
                             <div class="w-1 h-4 bg-zinc-700 rounded-full"></div>
                             <div class="w-1 h-4.5 bg-zinc-700 rounded-full"></div>
@@ -1094,6 +1099,8 @@
             ctx.msImageSmoothingEnabled = false;
         }
 
+        let _reusableImg = null;
+
         function fitCanvasIntegerScale() {
             const canvas = $('gb-canvas');
             const wrap = $('gb-screen-wrap');
@@ -1107,8 +1114,9 @@
 
             let availCssW, availCssH;
             if (isMobile) {
-                // Room for padding on mobile
-                availCssW = Math.max(160, vw - 24);
+                // Ensure room for chassis, bezel padding and borders symmetrically
+                const chromeX = 48;
+                availCssW = Math.max(160, vw - chromeX);
                 const reservedY = 52 + 44 + 190 + 8;
                 availCssH = Math.max(144, vh - reservedY);
             } else {
@@ -1116,25 +1124,35 @@
                 const centerCol = chassis?.parentElement;
                 const colW = centerCol?.clientWidth || 560;
                 // Leave margins so desktop chassis never clips the canvas
-                availCssW = Math.max(160, Math.min(500, colW - 40));
+                availCssW = Math.max(160, Math.min(500, colW - 48));
                 availCssH = Math.max(144, Math.min(vh * 0.58, availCssW * (144 / 160) + 16));
             }
 
-            // Target exact integer device pixels per GB pixel
-            const availDevW = availCssW * dpr;
-            const availDevH = availCssH * dpr;
-            const deviceScale = Math.max(1, Math.floor(Math.min(
-                availDevW / 160,
-                availDevH / 144
-            )));
+            let bufW, bufH, cssW, cssH;
 
-            const bufW = 160 * deviceScale;
-            const bufH = 144 * deviceScale;
-            const cssW = bufW / dpr;
-            const cssH = bufH / dpr;
+            // Only use device-pixel buffer on desktop when fractional display scaling (e.g. Windows 110%) is present
+            const hasFractionalDpr = !isMobile && Math.abs(dpr - Math.round(dpr)) >= 0.02;
 
-            const cssWStr = (Math.round(cssW * 1000) / 1000) + 'px';
-            const cssHStr = (Math.round(cssH * 1000) / 1000) + 'px';
+            if (hasFractionalDpr) {
+                const deviceScale = Math.max(1, Math.floor(Math.min(
+                    (availCssW * dpr) / 160,
+                    (availCssH * dpr) / 144
+                )));
+                bufW = 160 * deviceScale;
+                bufH = 144 * deviceScale;
+                cssW = bufW / dpr;
+                cssH = bufH / dpr;
+            } else {
+                // Mobile & integer DPR: Native 160x144 canvas, scaled by integer CSS multiplier (fastest on phone)
+                const cssScale = Math.max(1, Math.floor(Math.min(availCssW / 160, availCssH / 144)));
+                bufW = 160;
+                bufH = 144;
+                cssW = 160 * cssScale;
+                cssH = 144 * cssScale;
+            }
+
+            const cssWStr = Math.round(cssW) + 'px';
+            const cssHStr = Math.round(cssH) + 'px';
             const scaleKey = bufW + 'x' + bufH + '@' + cssWStr;
 
             if (scaleKey === _lastScaleKey && canvas.width === bufW && canvas.height === bufH) {
@@ -1161,24 +1179,28 @@
         }
 
         function blitFrame(frameData) {
-            const { canvas: src, ctx: srcCtx } = getFrameSrc();
-            let img;
-            try {
-                img = new ImageData(frameData, 160, 144);
-            } catch (_) {
-                img = new ImageData(new Uint8ClampedArray(frameData), 160, 144);
-            }
-            srcCtx.putImageData(img, 0, 0);
-
-            if (!_displayCanvas) _displayCanvas = $('gb-canvas');
-            if (!_displayCanvas) return;
+            const canvas = _displayCanvas || $('gb-canvas');
+            if (!canvas) return;
             if (!_displayCtx) {
-                _displayCtx = _displayCanvas.getContext('2d', { alpha: false });
+                _displayCtx = canvas.getContext('2d', { alpha: false });
+                disableSmoothing(_displayCtx);
             }
-            disableSmoothing(_displayCtx);
 
-            // Hardware GPU texture blit (smooth 60fps on phones with nearest-neighbor crisp pixels)
-            _displayCtx.drawImage(src, 0, 0, 160, 144, 0, 0, _displayCanvas.width, _displayCanvas.height);
+            if (!_reusableImg) {
+                _reusableImg = _displayCtx.createImageData(160, 144);
+            }
+            _reusableImg.data.set(frameData);
+
+            if (canvas.width === 160 && canvas.height === 144) {
+                // Direct blit: zero allocations, zero GPU rescaling latency
+                _displayCtx.putImageData(_reusableImg, 0, 0);
+            } else {
+                // Desktop fractional DPR path
+                const { canvas: src, ctx: srcCtx } = getFrameSrc();
+                srcCtx.putImageData(_reusableImg, 0, 0);
+                disableSmoothing(_displayCtx);
+                _displayCtx.drawImage(src, 0, 0, 160, 144, 0, 0, canvas.width, canvas.height);
+            }
         }
 
         // ============================================================
@@ -1844,12 +1866,13 @@
             animationFrameReq = requestAnimationFrame(tick);
         }
 
+        // Background watchdog: only step if page is backgrounded or hidden
         setInterval(() => {
-            if (emulatorPtr && performance.now() - lastTickTime > 80) {
+            if (document.hidden && emulatorPtr && performance.now() - lastTickTime > 100) {
                 stepEmulator();
                 lastTickTime = performance.now();
             }
-        }, 33);
+        }, 100);
 
         // ============================================================
         // MULTI-STAGE LOCKSTEP & RAM LOGIC
