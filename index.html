@@ -973,10 +973,8 @@
         // FIFO Queue for serial packets
         const incomingSerialQueue = [];
 
-        // Link liveness (bye on unload + heartbeat fallback)
+        // Link liveness (explicit bye on tab close — no periodic traffic)
         let linkAlive = false;
-        let lastPeerPongAt = 0;
-        let heartbeatTimer = null;
 
         /** Soft-reset link handshake after emulator re-init. Keeps PeerJS open. Ready always → 0. */
         function resetLinkSyncState({ notifyPeer = false } = {}) {
@@ -1027,32 +1025,9 @@
             if (p2Flag) p2Flag.className = 'w-3 h-3 rounded-full bg-slate-700';
         }
 
-        function stopHeartbeat() {
-            if (heartbeatTimer) {
-                clearInterval(heartbeatTimer);
-                heartbeatTimer = null;
-            }
-        }
-
-        function startHeartbeat() {
-            stopHeartbeat();
-            lastPeerPongAt = performance.now();
-            heartbeatTimer = setInterval(() => {
-                if (!connection?.open || !linkAlive) return;
-                try {
-                    connection.send({ type: 'ping', t: Date.now() });
-                } catch (_) {}
-                // No pong for ~8s → treat as gone (covers crash / killed tab without unload)
-                if (performance.now() - lastPeerPongAt > 8000) {
-                    handlePartnerGone('Partner timed out (no heartbeat).');
-                }
-            }, 2500);
-        }
-
         function handlePartnerGone(reason) {
             if (!linkAlive && !connection) return;
             linkAlive = false;
-            stopHeartbeat();
             const wasConn = connection;
             connection = null;
             try { wasConn?.close(); } catch (_) {}
@@ -1071,7 +1046,6 @@
             } catch (_) {}
             try { connection.close(); } catch (_) {}
             linkAlive = false;
-            stopHeartbeat();
             connection = null;
         }
 
@@ -2559,10 +2533,8 @@
 
             conn.on('open', () => {
                 linkAlive = true;
-                lastPeerPongAt = performance.now();
                 setConnectionStatus('LINKED', 'text-green-500 font-bold uppercase');
                 addChatMessage('SYSTEM', 'Peer connection established.');
-                startHeartbeat();
 
                 const myName = getLocalPlayerName();
                 const rawName = readRawPlayerName();
@@ -2580,16 +2552,6 @@
 
                 if (d.type === 'bye') {
                     handlePartnerGone('Partner closed the window.');
-                    return;
-                }
-
-                if (d.type === 'ping') {
-                    try { conn.send({ type: 'pong', t: d.t }); } catch (_) {}
-                    return;
-                }
-
-                if (d.type === 'pong') {
-                    lastPeerPongAt = performance.now();
                     return;
                 }
 
