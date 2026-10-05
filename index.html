@@ -1007,8 +1007,10 @@
         // AUDIO
         // ============================================================
         class GameAudio {
-            constructor(m, e) {
-                this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            constructor(m, e, ctx = null) {
+                // Reuse the AudioContext that was created before the emulator,
+                // so the emulator and Web Audio use exactly the same sample rate.
+                this.ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
                 this.module = m;
                 this.muted = false;
                 this.gain = this.ctx.createGain();
@@ -1047,9 +1049,15 @@
                 if (!this.buffer) return;
 
                 const nowSec = this.ctx.currentTime;
-                const latency = 0.08;
-                if (!this.startSec || this.startSec < nowSec || this.startSec > nowSec + 0.25) {
-                    this.startSec = nowSec + latency;
+                const latency = 0.1;
+                const nowPlusLatency = nowSec + latency;
+
+                // Keep the audio queue continuous. This mirrors binjgb's
+                // scheduling strategy: only reset when we actually fell
+                // behind the Web Audio clock.
+                this.startSec = this.startSec || nowPlusLatency;
+                if (this.startSec < nowSec) {
+                    this.startSec = nowPlusLatency;
                 }
 
                 const frames = 4096;
@@ -1287,8 +1295,13 @@
 
             makeWasmBuffer(romDataPtr, size).fill(0).set(new Uint8Array(romBuffer));
 
+            // Create the AudioContext BEFORE creating the emulator.
+            // binjgb's reference implementation passes Audio.ctx.sampleRate
+            // into emulator_new_simple(), keeping the generated audio rate
+            // identical to the Web Audio playback rate.
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
             const eNew = getExport('emulator_new_simple');
-            emulatorPtr = eNew(romDataPtr, size, 44100, 4096, 2);
+            emulatorPtr = eNew(romDataPtr, size, audioCtx.sampleRate, 4096, 2);
 
             if (savBuffer && savBuffer.byteLength > 0) {
                 const extRamFileNew = getExport('ext_ram_file_data_new');
@@ -1326,7 +1339,7 @@
             $('screen-start-overlay')?.classList.add('hidden');
             $('btn-reset-game')?.classList.remove('hidden');
 
-            audio = new GameAudio(module, emulatorPtr);
+            audio = new GameAudio(module, emulatorPtr, audioCtx);
             $('btn-download-sav').disabled = false;
             $('btn-save-now').disabled = false;
 
