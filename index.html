@@ -965,8 +965,47 @@
         let currentRomBuffer = null;
         let currentSavBuffer = null;
 
+        // Cached opponent identity — survives soft reset (PeerJS stays open).
+        // Ready is intentionally NOT cached across soft reset (duel-only).
+        let cachedOppRawName = null;
+        let cachedOppAvatar = null;
+
         // FIFO Queue for serial packets
         const incomingSerialQueue = [];
+
+        /** Soft-reset link handshake after emulator re-init. Keeps PeerJS open. Ready always → 0. */
+        function resetLinkSyncState({ notifyPeer = false } = {}) {
+            deckSynced = false;
+            boardSetupSynced = false;
+            lastP1State = null;
+            lastP1Visual = null;
+            lastP2Visual = null;
+            incomingSerialQueue.length = 0;
+
+            const wram = getWram();
+            if (wram) {
+                // Re-apply opponent name/avatar only — ready is duel state and must be 0
+                if (cachedOppRawName && cachedOppRawName.length > 0) {
+                    writeOpponentNameBytes(cachedOppRawName);
+                } else if (remotePlayerName && remotePlayerName !== 'OPPONENT' && remotePlayerName !== 'NONE') {
+                    $('opp-name-tag').innerText = remotePlayerName;
+                }
+                if (cachedOppAvatar !== null && cachedOppAvatar !== undefined) {
+                    wram[OFFSET_OPPONENT_AVATAR] = cachedOppAvatar;
+                }
+                wram[OFFSET_P1_READY] = 0;
+                wram[OFFSET_P2_READY] = 0;
+            }
+
+            const p1Flag = $('p1-flag');
+            const p2Flag = $('p2-flag');
+            if (p1Flag) p1Flag.className = 'w-3 h-3 rounded-full bg-slate-700';
+            if (p2Flag) p2Flag.className = 'w-3 h-3 rounded-full bg-slate-700';
+
+            if (notifyPeer && connection?.open) {
+                connection.send({ type: 'peer_soft_reset' });
+            }
+        }
 
         // ============================================================
         // CHARACTER MAP
@@ -2270,8 +2309,22 @@
                 }
                 const storedSram = await loadSramFromStorage();
                 const savBuf = storedSram ? storedSram.buffer : currentSavBuffer;
+                // Soft reset: rebuild emulator only. PeerJS connection stays open.
                 await initEmulator(currentRomBuffer, savBuf);
                 resetAllButtons();
+                // Name/avatar restored; ready forced to 0; peer notified to clear our ready.
+                resetLinkSyncState({ notifyPeer: true });
+                if (connection?.open) {
+                    const myName = getLocalPlayerName();
+                    const rawName = readRawPlayerName();
+                    connection.send({
+                        type: 'hello',
+                        room: myRoomCode,
+                        name: myName,
+                        rawName: rawName
+                    });
+                    addChatMessage('SYSTEM', 'Local soft reset — link preserved, ready cleared.');
+                }
                 $('gb-canvas')?.focus();
             };
         }
@@ -2445,12 +2498,40 @@
 
                 if (d.type === 'hello' || d.type === 'player_info') {
                     if (d.rawName && Array.isArray(d.rawName)) {
+                        cachedOppRawName = d.rawName.slice();
                         writeOpponentNameBytes(d.rawName);
                     }
                     if (d.name) {
                         remotePlayerName = d.name;
                         $('opp-name-tag').innerText = d.name;
                     }
+                    return;
+                }
+
+                if (d.type === 'peer_soft_reset') {
+                    // Opponent rebuilt emulator; keep PeerJS. Clear their ready on our side.
+                    deckSynced = false;
+                    boardSetupSynced = false;
+                    lastP1State = null;
+                    incomingSerialQueue.length = 0;
+                    const wram = getWram();
+                    if (wram) {
+                        wram[OFFSET_P2_READY] = 0;
+                    }
+                    const p2Flag = $('p2-flag');
+                    if (p2Flag) p2Flag.className = 'w-3 h-3 rounded-full bg-slate-700';
+                    // Re-broadcast our current ready (may be 0 after our own reset, or still set)
+                    if (wram && connection?.open) {
+                        const myReady = wram[OFFSET_P1_READY] | 0;
+                        connection.send({
+                            type: 'ready_sync',
+                            step: myReady,
+                            avatar: wram[OFFSET_PLAYER_AVATAR],
+                            name: readRawPlayerName()
+                        });
+                        lastP1State = myReady;
+                    }
+                    addChatMessage('SYSTEM', 'Opponent soft-reset — link preserved, their ready cleared.');
                     return;
                 }
 
@@ -2462,6 +2543,12 @@
                 if (d.type === 'ready_sync' || d.type === 'p1_ready_sync') {
                     const stepVal = d.step ?? d.ready;
                     const wram = getWram();
+                    if (d.avatar !== undefined) {
+                        cachedOppAvatar = d.avatar;
+                    }
+                    if (d.name && Array.isArray(d.name)) {
+                        cachedOppRawName = d.name.slice();
+                    }
                     if (wram && stepVal !== undefined) {
                         wram[OFFSET_P2_READY] = stepVal;
 
@@ -2482,9 +2569,11 @@
                             writeOpponentDeckBytes(d.deck);
                         }
                         if (d.rawName) {
+                            cachedOppRawName = Array.isArray(d.rawName) ? d.rawName.slice() : cachedOppRawName;
                             writeOpponentNameBytes(d.rawName);
                         }
                         if (d.avatar !== undefined) {
+                            cachedOppAvatar = d.avatar;
                             wram[OFFSET_OPPONENT_AVATAR] = d.avatar;
                         }
 
@@ -2528,8 +2617,17 @@
 
             conn.on('close', () => {
                 if (connection === conn) connection = null;
+                cachedOppRawName = null;
+                cachedOppAvatar = null;
+                deckSynced = false;
+                boardSetupSynced = false;
+                lastP1State = null;
+                incomingSerialQueue.length = 0;
                 setConnectionStatus('PARTNER DISCONNECTED', 'text-orange-400 font-bold uppercase');
                 addChatMessage('SYSTEM', 'Peer connection closed.');
+                const nameTag = $('opp-name-tag');
+                if (nameTag) nameTag.innerText = 'NONE';
+                remotePlayerName = 'OPPONENT';
             });
 
             conn.on('error', () => {
