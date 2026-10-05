@@ -86,7 +86,7 @@
             pointer-events: none;
         }
 
-        /* Game Boy Screen Bezel — hugs integer-scaled screen */
+        /* Game Boy Screen Bezel */
         .gb-screen-bezel {
             background: var(--gb-bezel-bg);
             border: 3px solid var(--gb-bezel-border);
@@ -96,8 +96,7 @@
                 inset 0 3px 10px rgba(0, 0, 0, 0.95),
                 0 1px 1px rgba(255, 255, 255, 0.08);
             position: relative;
-            /* visible: rounded overflow:hidden was clipping screen edge pixels */
-            overflow: visible;
+            overflow: hidden;
             width: fit-content;
             max-width: 100%;
             margin-left: auto;
@@ -122,76 +121,44 @@
             image-rendering: pixelated;
             image-rendering: -moz-crisp-edges;
             image-rendering: crisp-edges;
-            /* Exact CSS size is set by fitCanvasIntegerScale() — never width:100%. */
             width: 160px;
             height: 144px;
             background: #000;
             outline: none;
-            border: none;
             display: block;
             flex-shrink: 0;
-            margin: 0;
-            padding: 0;
-            /* content-box: style width/height == bitmap area (global * is border-box) */
-            box-sizing: content-box !important;
-            vertical-align: top;
+            margin: 0 auto;
         }
 
-        /* Screen frame hugs the canvas exactly. Border must NOT eat into the
-           content box (global * { box-sizing: border-box } would clip 1px on
-           the right and bottom of the GB screen). */
         #gb-screen-wrap {
             position: relative;
-            width: 160px;   /* overwritten by JS to match canvas CSS size */
+            width: 160px;
             height: 144px;
             background: #000;
-            /* No border-radius on the clip box — it shaves corner pixels. */
-            border-radius: 0;
+            border-radius: 0.5rem;
             overflow: hidden;
-            /* outline draws outside the box; does not shrink content. */
-            outline: 1px solid #27272a;
+            border: 1px solid #27272a;
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
             display: block;
             margin: 0 auto;
-            padding: 0;
-            border: none;
             flex-shrink: 0;
-            box-sizing: content-box !important;
-            line-height: 0; /* kill any residual inline gap under the canvas */
         }
 
-        /* Chassis shrink-wraps to the screen + controls (not a fixed max-width box). */
-        #gb-chassis {
-            width: fit-content;
-            max-width: 100%;
-            margin-left: auto;
-            margin-right: auto;
-            padding: 0.75rem;
-        }
-
-        /* Phones: chassis/bezel hug the integer-scaled screen (fit-content).
-           Do NOT force width:100% + max-width:100% on the wrap — that shrinks
-           the clip box below the canvas size and clips ~1–2px on the right. */
         @media (max-width: 1023px) {
             #gb-chassis {
                 padding: 0.4rem !important;
-                width: fit-content;
-                max-width: calc(100% - 4px);
+                width: 100%;
+                max-width: 100%;
                 box-sizing: border-box;
             }
             .gb-screen-bezel {
-                padding: 0.35rem !important;
-                width: fit-content;
+                padding: 0.4rem !important;
+                width: 100%;
                 max-width: 100%;
                 box-sizing: border-box;
-                /* Bezel must not clip the screen; wrap handles its own bounds. */
-                overflow: visible;
             }
             #gb-screen-wrap {
-                max-width: none;
-            }
-            #gb-canvas {
-                max-width: none;
+                max-width: 100%;
             }
         }
 
@@ -364,7 +331,6 @@
             touch-action: none;
             transition: transform 0.04s ease, box-shadow 0.04s ease;
             text-shadow: 0 -1px 1px rgba(0, 0, 0, 0.8), 0 1px 2px rgba(255, 255, 255, 0.35);
-            -webkit-tap-highlight-color: transparent;
         }
 
         @media (min-width: 640px) {
@@ -375,67 +341,13 @@
             }
         }
 
-        /* Desktop-only pressed look (hover-capable devices). */
-        @media (hover: hover) and (pointer: fine) {
-            .btn-action:active, .btn-action.pressed {
-                background: var(--action-btn-pressed);
-                box-shadow: 
-                    inset 0 4px 8px rgba(0, 0, 0, 0.95),
-                    0 2px 4px rgba(0, 0, 0, 0.5);
-                transform: translateY(2.5px) scale(0.96);
-                color: #fbcfe8;
-            }
-        }
-
-        /* Mobile: ZERO optical feedback on A/B (and all GB buttons).
-           No :active paint, no transitions, no transform — spam taps stay cheap. */
-        @media (hover: none), (pointer: coarse) {
-            .btn-action,
-            .btn-action:active,
-            .btn-action.pressed,
-            .btn-action:focus,
-            .btn-action:focus-visible {
-                transition: none !important;
-                transform: none !important;
-                background: var(--action-btn-bg) !important;
-                box-shadow:
-                    0 6px 14px rgba(0, 0, 0, 0.75),
-                    inset 0 2px 3px rgba(255, 255, 255, 0.45),
-                    inset 0 -3px 5px rgba(0, 0, 0, 0.65) !important;
-                color: #fff1f2 !important;
-                filter: none !important;
-                opacity: 1 !important;
-                outline: none !important;
-            }
-            .dpad-btn,
-            .dpad-btn:active,
-            .dpad-btn.pressed,
-            .btn-pill,
-            .btn-pill:active,
-            .btn-pill.pressed {
-                transition: none !important;
-                transform: none !important;
-            }
-            .dpad-btn:active,
-            .dpad-btn.pressed {
-                background: var(--dpad-plastic) !important;
-                box-shadow:
-                    0 4px 6px rgba(0, 0, 0, 0.6),
-                    inset 0 1px 1px rgba(255, 255, 255, 0.25) !important;
-            }
-            .dpad-btn:active span,
-            .dpad-btn.pressed span {
-                color: #64748b !important;
-                transform: none !important;
-                text-shadow: 0 1px 1px rgba(0, 0, 0, 0.8) !important;
-            }
-            .btn-pill:active,
-            .btn-pill.pressed {
-                background: linear-gradient(180deg, #475569 0%, #334155 70%, #1e293b 100%) !important;
-                box-shadow:
-                    0 3px 6px rgba(0, 0, 0, 0.6),
-                    inset 0 1px 1px rgba(255, 255, 255, 0.25) !important;
-            }
+        .btn-action:active, .btn-action.pressed {
+            background: var(--action-btn-pressed);
+            box-shadow: 
+                inset 0 4px 8px rgba(0, 0, 0, 0.95),
+                0 2px 4px rgba(0, 0, 0, 0.5);
+            transform: translateY(2.5px) scale(0.96);
+            color: #fbcfe8;
         }
 
         /* Pill Buttons (Select & Start) */
@@ -547,7 +459,7 @@
     </style>
 </head>
 
-<body class="px-1 py-2 sm:p-4 flex flex-col items-center min-h-[100dvh]">
+<body class="p-2 sm:p-4 flex flex-col items-center min-h-[100dvh]">
 
     <!-- TOP HEADER & CONNECTION BAR -->
     <header class="w-full max-w-6xl flex flex-wrap justify-between items-center gap-2.5 sm:gap-4 mb-3 sm:mb-4 bg-slate-900/90 p-2.5 sm:p-4 rounded-2xl border border-slate-800 shadow-xl backdrop-blur">
@@ -701,14 +613,39 @@
                 </div>
             </div>
 
+            <!-- System Logs -->
+            <div id="panel-logs-col" class="bg-slate-900/90 p-4 rounded-2xl border border-slate-800 shadow-lg flex flex-col overflow-hidden max-h-[300px]">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">
+                        System Log
+                    </h3>
+                    <button
+                        id="btn-copy-logs"
+                        type="button"
+                        class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-sky-400 hover:text-sky-300 text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg border border-slate-700 transition flex items-center gap-1 cursor-pointer"
+                        title="Copy entire logs content to clipboard"
+                    >
+                        <span>📋</span> <span id="copy-logs-text">COPY LOGS</span>
+                    </button>
+                </div>
+
+                <div
+                    id="system-logs"
+                    class="overflow-y-auto flex-1 font-mono text-slate-300 hide-scroll text-[11px] pr-1"
+                >
+                    <div class="log-line text-slate-400">
+                        Ready to load files...
+                    </div>
+                </div>
             </div>
+        </div>
 
         <!-- CENTER COLUMN: HANDHELD GAME BOY CONSOLE -->
         <div class="lg:col-span-6 lg:order-2 order-1 flex flex-col items-center w-full">
-            <div id="gb-chassis" class="gb-chassis relative select-none">
+            <div id="gb-chassis" class="gb-chassis w-full max-w-[460px] p-3.5 sm:p-5 relative select-none">
                 
                 <!-- Game Boy Screen Bezel -->
-                <div class="gb-screen-bezel relative flex flex-col items-center">
+                <div class="gb-screen-bezel p-3 sm:p-4 relative flex flex-col items-center">
                     
                     <!-- Top bezel accents: Power LED & Stereo indicator -->
                     <div class="w-full flex items-center justify-between text-[10px] text-zinc-500 font-sans font-bold px-1 mb-2">
@@ -813,15 +750,17 @@
                                     <button type="button" data-gb-btn="B" class="btn-action btn-b" aria-label="Button B">
                                         B
                                     </button>
+                                    <span class="text-[10px] font-black text-slate-400 italic tracking-wider mt-1 rotate-[25deg]">B</span>
                                 </div>
                                 <!-- Button A -->
                                 <div class="flex flex-col items-center">
                                     <button type="button" data-gb-btn="A" class="btn-action btn-a" aria-label="Button A">
                                         A
                                     </button>
+                                    <span class="text-[10px] font-black text-slate-400 italic tracking-wider mt-1 rotate-[25deg]">A</span>
                                 </div>
                             </div>
-                            <span class="text-[9px] font-bold text-slate-500 tracking-wider mt-1.5 rotate-[-25deg] uppercase font-mono">Action</span>
+                            <span class="text-[9px] font-bold text-slate-500 tracking-wider mt-1.5 uppercase font-mono">Action</span>
                         </div>
 
                     </div>
@@ -857,6 +796,9 @@
                 <button type="button" class="mobile-tab-btn flex-1 py-2 text-[11px] font-bold rounded-xl text-slate-400 hover:text-white transition cursor-pointer" data-tab="chat">
                     💬 Chat & Sync
                 </button>
+                <button type="button" class="mobile-tab-btn flex-1 py-2 text-[11px] font-bold rounded-xl text-slate-400 hover:text-white transition cursor-pointer" data-tab="logs">
+                    📋 Logs
+                </button>
             </div>
         </div>
 
@@ -865,22 +807,33 @@
 
             <div class="bg-slate-900/90 p-4 rounded-2xl border border-slate-800 shadow-lg">
                 <h3 class="text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider font-mono">
-                    Link Status
+                    RAM Sync Status
                 </h3>
 
-                <div class="flex items-center justify-between gap-3 bg-slate-950 p-2.5 rounded-xl mb-1.5 border border-slate-800/80">
-                    <span class="text-[10px] text-slate-400 font-mono tracking-wide">YOU</span>
-                    <span id="p1-flag" class="w-3 h-3 rounded-full bg-slate-700 transition-all" title="Ready"></span>
+                <div class="flex justify-between items-center bg-slate-950 p-2 rounded-xl mb-1.5 border border-slate-800/80">
+                    <span class="text-[10px] text-slate-400 font-mono">P1_READY ($C5FD)</span>
+                    <div class="flex items-center gap-2">
+                        <span id="p1-val" class="text-[10px] font-bold text-slate-300 font-mono">0</span>
+                        <span id="p1-flag" class="w-2.5 h-2.5 rounded-full bg-slate-700"></span>
+                    </div>
                 </div>
 
-                <div class="flex items-center justify-between gap-3 bg-slate-950 p-2.5 rounded-xl mb-1.5 border border-slate-800/80">
-                    <span class="text-[10px] text-slate-400 font-mono tracking-wide">OPPONENT</span>
-                    <span id="p2-flag" class="w-3 h-3 rounded-full bg-slate-700 transition-all" title="Ready"></span>
+                <div class="flex justify-between items-center bg-slate-950 p-2 rounded-xl mb-1.5 border border-slate-800/80">
+                    <span class="text-[10px] text-slate-400 font-mono">P2_READY ($C5FE)</span>
+                    <div class="flex items-center gap-2">
+                        <span id="p2-val" class="text-[10px] font-bold text-slate-300 font-mono">0</span>
+                        <span id="p2-flag" class="w-2.5 h-2.5 rounded-full bg-slate-700"></span>
+                    </div>
                 </div>
 
-                <div class="flex justify-between items-center bg-slate-950 p-2.5 rounded-xl border border-slate-800/80">
-                    <span class="text-[10px] text-slate-400 font-mono">NAME</span>
-                    <span id="opp-name-tag" class="text-[10px] text-sky-400 font-bold truncate max-w-[140px] font-mono">
+                <div class="flex justify-between items-center bg-slate-950 p-2 rounded-xl mb-1.5 border border-slate-800/80">
+                    <span class="text-[10px] text-slate-400 font-mono">FIFO QUEUE</span>
+                    <span id="fifo-depth" class="text-[10px] text-sky-400 font-bold font-mono">0 pkts</span>
+                </div>
+
+                <div class="flex justify-between items-center bg-slate-950 p-2 rounded-xl border border-slate-800/80">
+                    <span class="text-[10px] text-slate-400 font-mono">OPPONENT</span>
+                    <span id="opp-name-tag" class="text-[10px] text-sky-400 font-bold truncate max-w-[120px] font-mono">
                         NONE
                     </span>
                 </div>
@@ -913,8 +866,56 @@
     <script>
         const $ = (id) => document.getElementById(id);
 
-        // Release build: logging disabled (no-op keeps call sites safe).
-        const log = (_msg) => {};
+        const logHistory = ["[Ready to load files...]"];
+
+        const log = (msg) => {
+            const timeStr = new Date().toLocaleTimeString();
+            const formatted = `[${timeStr}] ${msg}`;
+            logHistory.push(formatted);
+            const div = document.createElement('div');
+            div.className = 'log-line';
+            div.innerText = formatted;
+            const container = $('system-logs');
+            if (container) {
+                container.appendChild(div);
+                container.scrollTop = container.scrollHeight;
+            }
+        };
+
+        const copyLogsToClipboard = async () => {
+            const logsEl = $('system-logs');
+            const textToCopy = logHistory.length > 0 
+                ? logHistory.join('\n') 
+                : (logsEl ? Array.from(logsEl.querySelectorAll('.log-line')).map(l => l.innerText.trim()).join('\n') : '');
+
+            if (!textToCopy) return;
+
+            try {
+                await navigator.clipboard.writeText(textToCopy);
+            } catch (_) {
+                const ta = document.createElement('textarea');
+                ta.value = textToCopy;
+                ta.style.position = 'fixed';
+                ta.style.opacity = '0';
+                document.body.appendChild(ta);
+                ta.focus();
+                ta.select();
+                try { document.execCommand('copy'); } catch (_) {}
+                document.body.removeChild(ta);
+            }
+
+            const btnText = $('copy-logs-text');
+            if (btnText) {
+                const orig = btnText.innerText;
+                btnText.innerText = 'COPIED!';
+                setTimeout(() => { btnText.innerText = orig; }, 1500);
+            }
+        };
+
+        const btnCopyLogs = $('btn-copy-logs');
+        if (btnCopyLogs) {
+            btnCopyLogs.onclick = copyLogsToClipboard;
+        }
 
         // ============================================================
         // RAM OFFSETS (Base address = $C000)
@@ -1025,10 +1026,6 @@
             constructor(m, e) {
                 this.ctx = new (window.AudioContext || window.webkitAudioContext)();
                 this.module = m;
-                this.muted = false;
-                this.gain = this.ctx.createGain();
-                this.gain.gain.value = 1;
-                this.gain.connect(this.ctx.destination);
                 const getPtr = getExport('get_audio_buffer_ptr');
                 const getCap = getExport('get_audio_buffer_capacity');
                 if (getPtr && getCap) {
@@ -1039,32 +1036,12 @@
                 this.startSec = 0;
             }
 
-            setMuted(muted) {
-                this.muted = !!muted;
-                if (this.gain) {
-                    this.gain.gain.value = this.muted ? 0 : 1;
-                }
-                const icon = $('audio-icon');
-                if (icon) icon.innerText = this.muted ? '🔇' : '🔊';
-            }
-
-            toggleMute() {
-                this.setMuted(!this.muted);
-                // Unmuting should also resume a suspended context (autoplay policy).
-                if (!this.muted && this.ctx && this.ctx.state === 'suspended') {
-                    this.ctx.resume();
-                }
-                return this.muted;
-            }
-
             push() {
-                if (!this.ctx || this.muted) return;
+                if (!this.ctx) return;
                 if (this.ctx.state === 'suspended') {
-                    // Do not auto-resume here — user gesture is required on many browsers.
+                    this.ctx.resume();
                     return;
                 }
-                if (!this.buffer) return;
-
                 const nowSec = this.ctx.currentTime;
                 const latency = 0.08;
                 if (!this.startSec || this.startSec < nowSec || this.startSec > nowSec + 0.25) {
@@ -1072,48 +1049,33 @@
                 }
 
                 const frames = 4096;
-                // Guard against buffer underrun if WASM capacity is smaller.
-                const maxSamples = Math.floor((this.buffer.length || 0) / 2);
-                const useFrames = Math.min(frames, maxSamples || frames);
-
-                const buffer = this.ctx.createBuffer(2, useFrames, this.ctx.sampleRate);
+                const buffer = this.ctx.createBuffer(2, frames, this.ctx.sampleRate);
                 const c0 = buffer.getChannelData(0);
                 const c1 = buffer.getChannelData(1);
 
-                for (let i = 0; i < useFrames; i++) {
+                for (let i = 0; i < frames; i++) {
                     c0[i] = (this.buffer[2 * i] / 255) * 0.4;
                     c1[i] = (this.buffer[2 * i + 1] / 255) * 0.4;
                 }
 
                 const source = this.ctx.createBufferSource();
                 source.buffer = buffer;
-                source.connect(this.gain);
+                source.connect(this.ctx.destination);
                 source.onended = () => {
                     try { source.disconnect(); } catch (_) {}
                 };
                 source.start(this.startSec);
-                this.startSec += useFrames / this.ctx.sampleRate;
+                this.startSec += frames / this.ctx.sampleRate;
             }
         }
 
         // ============================================================
-        // INTEGER PIXEL SCALE — device pixels (fixes fractional DPR)
+        // INTEGER PIXEL SCALE — device pixels (fixes fractional DPR & phone lag)
         // ============================================================
-        // Your log: dpr=1.1 (Windows 110% display scaling).
-        // ×3 CSS × 1.1 = 475.2 device px height → uneven 2px/3px rows.
-        //
-        // Scaling strategy:
-        //  • Mobile: keep a 160×144 buffer and let CSS (image-rendering:pixelated)
-        //    upscale. Avoids a huge drawImage every frame (was the main phone lag).
-        //  • Desktop (esp. fractional DPR like 1.1): integer *device* pixels so
-        //    rows stay uniform; upscale once via nearest-neighbor into the buffer.
-        let _lastScaleKey = '';
-        let _useCssUpscale = true; // true = buffer is 160×144; false = device buffer
+        let _lastDeviceScale = 0;
         let _frameSrcCanvas = null;
         let _frameSrcCtx = null;
         let _displayCtx = null;
-        let _displayCanvas = null;
-        let _cachedImageData = null;
 
         function getFrameSrc() {
             if (!_frameSrcCanvas) {
@@ -1141,13 +1103,11 @@
             const dpr = window.devicePixelRatio || 1;
             const vw = document.documentElement.clientWidth || window.innerWidth || 360;
             const vh = window.innerHeight || 640;
-            const isMobile = vw < 1024 ||
-                !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+            const isMobile = vw < 1024;
 
             let availCssW, availCssH;
             if (isMobile) {
-                const sideChrome = 4 + 8 + 8 + 4;
-                availCssW = Math.max(160, vw - sideChrome);
+                availCssW = Math.max(160, vw - 4 - 12);
                 const reservedY = 52 + 44 + 190 + 8;
                 availCssH = Math.max(144, vh - reservedY);
             } else {
@@ -1158,43 +1118,30 @@
                 availCssH = Math.max(144, Math.min(vh * 0.65, availCssW * (144 / 160) + 16));
             }
 
-            let bufW, bufH, cssW, cssH, useCssUpscale;
+            // Work in device pixels so height and width both land on integers.
+            const availDevW = availCssW * dpr;
+            const availDevH = availCssH * dpr;
+            const deviceScale = Math.max(1, Math.floor(Math.min(
+                availDevW / 160,
+                availDevH / 144
+            )));
 
-            if (isMobile || Math.abs(dpr - Math.round(dpr)) < 0.02) {
-                // Cheap path: 160×144 buffer + integer CSS scale (GPU nearest-neighbor).
-                const cssScale = Math.max(1, Math.floor(Math.min(availCssW / 160, availCssH / 144)));
-                bufW = 160;
-                bufH = 144;
-                cssW = 160 * cssScale;
-                cssH = 144 * cssScale;
-                useCssUpscale = true;
-            } else {
-                // Fractional DPR desktop: integer device pixels per source pixel.
-                const deviceScale = Math.max(1, Math.floor(Math.min(
-                    (availCssW * dpr) / 160,
-                    (availCssH * dpr) / 144
-                )));
-                bufW = 160 * deviceScale;
-                bufH = 144 * deviceScale;
-                cssW = bufW / dpr;
-                cssH = bufH / dpr;
-                useCssUpscale = false;
-            }
+            const bufW = 160 * deviceScale;
+            const bufH = 144 * deviceScale;
+            const cssW = bufW / dpr;
+            const cssH = bufH / dpr;
 
-            const cssWStr = (Math.round(cssW * 1000) / 1000) + 'px';
-            const cssHStr = (Math.round(cssH * 1000) / 1000) + 'px';
-            const scaleKey = bufW + 'x' + bufH + '@' + cssWStr;
-
-            if (scaleKey === _lastScaleKey && canvas.width === bufW) {
+            if (deviceScale === _lastDeviceScale &&
+                canvas.width === bufW &&
+                canvas.style.width === cssW + 'px') {
                 return;
             }
-            _lastScaleKey = scaleKey;
-            _useCssUpscale = useCssUpscale;
+            _lastDeviceScale = deviceScale;
 
-            canvas.style.width = cssWStr;
-            canvas.style.height = cssHStr;
-            wrap.style.width = cssWStr;
-            wrap.style.height = cssHStr;
+            canvas.style.width = cssW + 'px';
+            canvas.style.height = cssH + 'px';
+            wrap.style.width = cssW + 'px';
+            wrap.style.height = cssH + 'px';
 
             if (canvas.width !== bufW || canvas.height !== bufH) {
                 canvas.width = bufW;
@@ -1202,7 +1149,6 @@
                 _displayCtx = null;
             }
 
-            _displayCanvas = canvas;
             if (!_displayCtx) {
                 _displayCtx = canvas.getContext('2d', { alpha: false });
             }
@@ -1210,33 +1156,23 @@
         }
 
         function blitFrame(frameData) {
-            // Reuse ImageData wrapper when the underlying buffer is the same view.
-            let img = _cachedImageData;
-            if (!img || img.data.buffer !== frameData.buffer || img.data.byteOffset !== frameData.byteOffset) {
-                try {
-                    img = new ImageData(frameData, 160, 144);
-                } catch (_) {
-                    img = new ImageData(new Uint8ClampedArray(frameData), 160, 144);
-                }
-                _cachedImageData = img;
+            const { canvas: src, ctx: srcCtx } = getFrameSrc();
+            let img;
+            try {
+                img = new ImageData(frameData, 160, 144);
+            } catch (_) {
+                img = new ImageData(new Uint8ClampedArray(frameData), 160, 144);
             }
+            srcCtx.putImageData(img, 0, 0);
 
-            if (!_displayCanvas) _displayCanvas = $('gb-canvas');
-            if (!_displayCanvas) return;
+            const canvas = $('gb-canvas');
+            if (!canvas) return;
             if (!_displayCtx) {
-                _displayCtx = _displayCanvas.getContext('2d', { alpha: false });
-                disableSmoothing(_displayCtx);
+                _displayCtx = canvas.getContext('2d', { alpha: false });
             }
-
-            if (_useCssUpscale || _displayCanvas.width === 160) {
-                // Fast path: one putImageData; CSS scales the element.
-                _displayCtx.putImageData(img, 0, 0);
-            } else {
-                // Desktop fractional-DPR path: stage then nearest-neighbor upscale.
-                const { ctx: srcCtx } = getFrameSrc();
-                srcCtx.putImageData(img, 0, 0);
-                _displayCtx.drawImage(_frameSrcCanvas, 0, 0, 160, 144, 0, 0, _displayCanvas.width, _displayCanvas.height);
-            }
+            disableSmoothing(_displayCtx);
+            // Each GB pixel -> deviceScale x deviceScale hardware accelerated on-screen blit
+            _displayCtx.drawImage(src, 0, 0, 160, 144, 0, 0, canvas.width, canvas.height);
         }
 
         // ============================================================
@@ -1322,15 +1258,6 @@
         // ============================================================
         async function initEmulator(romBuffer, savBuffer = null) {
             if (animationFrameReq) cancelAnimationFrame(animationFrameReq);
-
-            // Reset/reload may create a new emulator and AudioContext. Close the
-            // previous context so repeated resets do not leave old audio engines
-            // running in the background.
-            if (audio?.ctx) {
-                try { await audio.ctx.close(); } catch (_) {}
-            }
-            audio = null;
-
             log("Booting WASM...");
 
             module = await Binjgb();
@@ -1372,8 +1299,6 @@
             if (jNew && jSet) {
                 joypadPtr = jNew();
                 jSet(emulatorPtr, joypadPtr);
-                refreshJoypadFns();
-                refreshButtonElementCache();
                 setupInput();
             }
 
@@ -1398,12 +1323,8 @@
             // Size canvas to exact integer multiple of 160×144 after layout settles.
             requestAnimationFrame(() => {
                 fitCanvasIntegerScale();
-                // Second pass after fonts/bezel may reflow
                 setTimeout(fitCanvasIntegerScale, 50);
             });
-
-            // Sync mute icon with fresh audio instance
-            if (audio) audio.setMuted(false);
 
             tick();
         }
@@ -1421,125 +1342,53 @@
 
         const pressedButtons = new Set();
 
-        // Cache WASM joypad exports. These are refreshed every time the emulator
-        // is (re)initialized, so the Reset button gets functions belonging to
-        // the new WASM module instead of stale exports.
-        const joypadFns = Object.create(null);
-
-        // Cache the DOM button elements. querySelectorAll() is only used when
-        // the cache is first built or when the UI has actually been replaced.
-        // This keeps rapid A/B presses cheap on phones.
-        const buttonElementCache = new Map();
-
-        // Touch haptics are intentionally disabled by default. Calling
-        // navigator.vibrate() on every rapid A/B press can noticeably contend
-        // with the emulator on some mobile browsers.
-        const ENABLE_HAPTIC_FEEDBACK = false;
-
-        // Mobile: no classList / no pressed styles. Desktop only gets visual feedback.
-        const IS_COARSE_POINTER = !!(
-            window.matchMedia &&
-            (window.matchMedia('(hover: none)').matches ||
-             window.matchMedia('(pointer: coarse)').matches)
-        );
-        const USE_JS_VISUAL_FEEDBACK = !IS_COARSE_POINTER;
-
-        // Action-button state (survives Reset).
-        const actionPointerIds = new Map();
-        const actionPointerToButton = new Map();
-        const actionTouchIds = new Map();
-        const actionBtnTouchCounts = Object.create(null);
-
-        function refreshButtonElementCache() {
-            buttonElementCache.clear();
-            document.querySelectorAll('[data-gb-btn]').forEach(el => {
-                const btn = el.getAttribute('data-gb-btn');
-                if (!btn) return;
-                if (!buttonElementCache.has(btn)) buttonElementCache.set(btn, []);
-                buttonElementCache.get(btn).push(el);
-            });
-        }
-
-        function getButtonElements(btn) {
-            let els = buttonElementCache.get(btn);
-            if (!els || els.length === 0 || els.some(el => !el.isConnected)) {
-                refreshButtonElementCache();
-                els = buttonElementCache.get(btn) || [];
-            }
-            return els;
-        }
-
-        function refreshJoypadFns() {
-            for (const btn of Object.keys(JOYPAD_EXPORT_NAMES)) {
-                joypadFns[btn] = getExport(JOYPAD_EXPORT_NAMES[btn]);
-            }
-        }
-
-        const desiredButtonStates = Object.create(null);
-        const appliedButtonStates = Object.create(null);
-
         function setButtonState(btn, isPressed) {
-            const state = !!isPressed;
-            // Skip redundant work on rapid spam.
-            if (desiredButtonStates[btn] === state) return;
-
-            if (state) pressedButtons.add(btn);
+            if (isPressed) pressedButtons.add(btn);
             else pressedButtons.delete(btn);
-            desiredButtonStates[btn] = state;
 
-            // Desktop only — never touch the DOM on phones.
-            if (USE_JS_VISUAL_FEEDBACK) {
-                const els = getButtonElements(btn);
-                els.forEach(el => el.classList.toggle('pressed', state));
-            }
-        }
-
-        function flushJoypadStates() {
-            if (!emulatorPtr || !module) return;
-
-            for (const btn of Object.keys(JOYPAD_EXPORT_NAMES)) {
-                const desired = !!desiredButtonStates[btn];
-                const applied = !!appliedButtonStates[btn];
-                if (desired === applied) continue;
-
-                let fn = joypadFns[btn];
-                if (!fn) {
-                    fn = getExport(JOYPAD_EXPORT_NAMES[btn]);
-                    joypadFns[btn] = fn;
-                }
-                if (fn) {
-                    try {
-                        fn(emulatorPtr, desired ? 1 : 0);
-                        appliedButtonStates[btn] = desired;
-                    } catch (err) {
-                        console.error('Error sending joypad input:', err);
+            if (emulatorPtr && module) {
+                const exportName = JOYPAD_EXPORT_NAMES[btn];
+                if (exportName) {
+                    const fn = getExport(exportName);
+                    if (fn) {
+                        try {
+                            fn(emulatorPtr, isPressed ? 1 : 0);
+                        } catch (err) {
+                            console.error('Error sending joypad input:', err);
+                        }
                     }
                 }
+            }
+
+            // Visual feedback on all matching on-screen buttons
+            const els = document.querySelectorAll(`[data-gb-btn="${btn}"]`);
+            els.forEach(el => {
+                if (isPressed) el.classList.add('pressed');
+                else el.classList.remove('pressed');
+            });
+
+            // Haptic vibration on phones (if supported)
+            if (isPressed && navigator.vibrate) {
+                try { navigator.vibrate(10); } catch (_) {}
             }
         }
 
         function resetAllButtons() {
             const all = ['up', 'down', 'left', 'right', 'A', 'B', 'start', 'select'];
-
-            pressedButtons.clear();
-            actionPointerIds.clear();
-            actionPointerToButton.clear();
-            actionTouchIds.clear();
-            for (const k of Object.keys(actionBtnTouchCounts)) {
-                actionBtnTouchCounts[k] = 0;
-            }
-
-            for (const btn of all) {
-                desiredButtonStates[btn] = false;
-                appliedButtonStates[btn] = false;
-
-                if (USE_JS_VISUAL_FEEDBACK) {
-                    getButtonElements(btn).forEach(el => el.classList.remove('pressed'));
+            all.forEach(btn => {
+                pressedButtons.delete(btn);
+                if (emulatorPtr && module) {
+                    const exportName = JOYPAD_EXPORT_NAMES[btn];
+                    if (exportName) {
+                        const fn = getExport(exportName);
+                        if (fn) {
+                            try { fn(emulatorPtr, 0); } catch (_) {}
+                        }
+                    }
                 }
-            }
-
-            // Ensure the currently active emulator receives the reset state.
-            flushJoypadStates();
+                const els = document.querySelectorAll(`[data-gb-btn="${btn}"]`);
+                els.forEach(el => el.classList.remove('pressed'));
+            });
         }
 
         let inputSetupDone = false;
@@ -1662,83 +1511,49 @@
                 dpadCross.addEventListener('pointercancel', clearPointerDpad);
             }
 
-            // Action & Pill Buttons
-            // Mobile: TouchEvents only (no setPointerCapture / no classList).
-            // Desktop: PointerEvents with visual pressed state.
-            const isActionButton = (target) => {
-                const el = target instanceof Element
-                    ? target.closest('[data-gb-btn]:not(.dpad-btn)')
-                    : null;
-                return el || null;
-            };
+            // Action & Pill Buttons Touch Listeners (A, B, Select, Start)
+            // Each button tracks active touch identifiers so multiple buttons can be held at once!
+            const touchButtons = document.querySelectorAll('[data-gb-btn]:not(.dpad-btn)');
+            touchButtons.forEach(el => {
+                const btn = el.getAttribute('data-gb-btn');
+                const activeBtnTouchIds = new Set();
 
-            if (IS_COARSE_POINTER) {
-                document.addEventListener('touchstart', (e) => {
-                    let handled = false;
-                    for (let i = 0; i < e.changedTouches.length; i++) {
-                        const t = e.changedTouches[i];
-                        const el = isActionButton(t.target);
-                        if (!el) continue;
-                        const btn = el.getAttribute('data-gb-btn');
-                        if (!btn) continue;
-                        handled = true;
-                        actionTouchIds.set(t.identifier, btn);
-                        actionBtnTouchCounts[btn] = (actionBtnTouchCounts[btn] || 0) + 1;
-                        if (actionBtnTouchCounts[btn] === 1) setButtonState(btn, true);
-                    }
-                    if (handled) {
-                        e.preventDefault();
-                        if (audio?.ctx?.state === 'suspended') audio.ctx.resume();
-                    }
-                }, { passive: false });
-
-                const endActionTouch = (e) => {
-                    for (let i = 0; i < e.changedTouches.length; i++) {
-                        const t = e.changedTouches[i];
-                        const btn = actionTouchIds.get(t.identifier);
-                        if (!btn) continue;
-                        actionTouchIds.delete(t.identifier);
-                        const count = (actionBtnTouchCounts[btn] || 1) - 1;
-                        actionBtnTouchCounts[btn] = count;
-                        if (count <= 0) {
-                            actionBtnTouchCounts[btn] = 0;
-                            setButtonState(btn, false);
-                        }
-                    }
-                };
-                document.addEventListener('touchend', endActionTouch, { passive: true });
-                document.addEventListener('touchcancel', endActionTouch, { passive: true });
-            } else {
-                document.addEventListener('pointerdown', (e) => {
-                    if (e.pointerType === 'touch') return;
-                    const el = isActionButton(e.target);
-                    if (!el) return;
+                el.addEventListener('touchstart', (e) => {
                     e.preventDefault();
-                    const btn = el.getAttribute('data-gb-btn');
-                    if (!btn) return;
-                    if (!actionPointerIds.has(btn)) actionPointerIds.set(btn, new Set());
-                    actionPointerIds.get(btn).add(e.pointerId);
-                    actionPointerToButton.set(e.pointerId, btn);
-                    try { el.setPointerCapture(e.pointerId); } catch (_) {}
+                    e.stopPropagation();
+                    if (audio?.ctx?.state === 'suspended') audio.ctx.resume();
+                    for (let i = 0; i < e.changedTouches.length; i++) {
+                        activeBtnTouchIds.add(e.changedTouches[i].identifier);
+                    }
                     setButtonState(btn, true);
                 }, { passive: false });
 
-                const releaseActionPointer = (e) => {
-                    const btn = actionPointerToButton.get(e.pointerId);
-                    if (!btn) return;
-                    actionPointerToButton.delete(e.pointerId);
-                    const ids = actionPointerIds.get(btn);
-                    if (ids) {
-                        ids.delete(e.pointerId);
-                        if (ids.size === 0) {
-                            actionPointerIds.delete(btn);
-                            setButtonState(btn, false);
-                        }
+                const handleEnd = (e) => {
+                    for (let i = 0; i < e.changedTouches.length; i++) {
+                        activeBtnTouchIds.delete(e.changedTouches[i].identifier);
+                    }
+                    if (activeBtnTouchIds.size === 0) {
+                        setButtonState(btn, false);
                     }
                 };
-                document.addEventListener('pointerup', releaseActionPointer, { passive: true });
-                document.addEventListener('pointercancel', releaseActionPointer, { passive: true });
-            }
+
+                el.addEventListener('touchend', handleEnd, { passive: false });
+                el.addEventListener('touchcancel', handleEnd, { passive: false });
+
+                // Desktop Mouse fallback
+                el.addEventListener('mousedown', (e) => {
+                    e.preventDefault();
+                    setButtonState(btn, true);
+                    if (audio?.ctx?.state === 'suspended') audio.ctx.resume();
+                });
+                el.addEventListener('mouseup', (e) => {
+                    e.preventDefault();
+                    setButtonState(btn, false);
+                });
+                el.addEventListener('mouseleave', (e) => {
+                    setButtonState(btn, false);
+                });
+            });
 
             // ========================================================
             // KEYBOARD CONTROLS (DESKTOP)
@@ -1808,6 +1623,10 @@
                             if (filesCol) filesCol.style.display = 'none';
                             if (chatCol) chatCol.style.display = 'flex';
                             chatCol?.scrollIntoView({ behavior: 'smooth' });
+                        } else if (tab === 'logs') {
+                            if (filesCol) filesCol.style.display = 'flex';
+                            if (chatCol) chatCol.style.display = 'none';
+                            $('system-logs')?.scrollIntoView({ behavior: 'smooth' });
                         }
                     }
                 };
@@ -1825,7 +1644,7 @@
                     if (activeTab === 'game') {
                         if (filesCol) filesCol.style.display = 'none';
                         if (chatCol) chatCol.style.display = 'none';
-                    } else if (activeTab === 'files') {
+                    } else if (activeTab === 'files' || activeTab === 'logs') {
                         if (filesCol) filesCol.style.display = 'flex';
                         if (chatCol) chatCol.style.display = 'none';
                     } else if (activeTab === 'chat') {
@@ -1859,32 +1678,18 @@
                 };
             }
 
-            // Audio Mute / Resume button
+            // Audio Toggle / Resume button
             const btnAudio = $('btn-audio-toggle');
             if (btnAudio) {
                 btnAudio.onclick = () => {
-                    if (!audio?.ctx) {
-                        // Emulator not started yet — nothing to mute.
-                        return;
-                    }
-                    // Always try to resume first if the context is suspended
-                    // (browser autoplay policy), then toggle mute.
+                    if (!audio?.ctx) return;
                     if (audio.ctx.state === 'suspended') {
-                        audio.ctx.resume().then(() => {
-                            audio.setMuted(false);
-                        }).catch(() => {});
-                        return;
+                        audio.ctx.resume();
+                        $('audio-icon').innerText = '🔊';
+                    } else if (audio.ctx.state === 'running') {
+                        $('audio-icon').innerText = '🔊';
                     }
-                    audio.toggleMute();
                 };
-            }
-
-            // Integer-scale the GB screen whenever the layout changes.
-            fitCanvasIntegerScale();
-            window.addEventListener('resize', fitCanvasIntegerScale);
-            // Orientation / visual viewport changes on phones
-            if (window.visualViewport) {
-                window.visualViewport.addEventListener('resize', fitCanvasIntegerScale);
             }
         }
 
@@ -1930,8 +1735,6 @@
         function stepEmulator() {
             if (!module || !emulatorPtr) return;
 
-            flushJoypadStates();
-
             const runUntil = getExport('emulator_run_until_f64');
             const getTicks = getExport('emulator_get_ticks_f64');
             const target = getTicks(emulatorPtr) + 70224;
@@ -1955,24 +1758,23 @@
             const getFb = getExport('get_frame_buffer_ptr');
             if (getFb) {
                 const fbPtr = getFb(emulatorPtr);
-                // View into WASM heap — blitFrame stages it then nearest-neighbor upscales.
                 const frameData = new Uint8ClampedArray(module.HEAPU8.buffer, fbPtr, 160 * 144 * 4);
                 blitFrame(frameData);
             }
 
             lastTickTime = performance.now();
             animationFrameReq = requestAnimationFrame(tick);
+            updateDebugOverlay();
         }
 
-        // Background watchdog: if rAF pauses (screenshot / background tab), keep
-        // lockstep + network alive — but not at a full 60 Hz (that doubled CPU
-        // load on phones when rAF was also struggling).
+        // Background watchdog: If requestAnimationFrame pauses (e.g. taking screenshot,
+        // tab switched, or reader mode active), keep stepping the CPU and network queues!
         setInterval(() => {
-            if (emulatorPtr && performance.now() - lastTickTime > 80) {
+            if (emulatorPtr && performance.now() - lastTickTime > 60) {
                 stepEmulator();
                 lastTickTime = performance.now();
             }
-        }, 33);
+        }, 16);
 
         // ============================================================
         // MULTI-STAGE LOCKSTEP & RAM LOGIC
@@ -1984,14 +1786,10 @@
             const p1 = wram[OFFSET_P1_READY];
             const p2 = wram[OFFSET_P2_READY];
 
-            const p1Flag = $('p1-flag');
-            const p2Flag = $('p2-flag');
-            if (p1Flag) {
-                p1Flag.className = `w-3 h-3 rounded-full transition-all ${p1 > 0 ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-slate-700'}`;
-            }
-            if (p2Flag) {
-                p2Flag.className = `w-3 h-3 rounded-full transition-all ${p2 > 0 ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-slate-700'}`;
-            }
+            $('p1-val').innerText = p1;
+            $('p2-val').innerText = p2;
+            $('p1-flag').className = `w-3 h-3 rounded-full ${p1 > 0 ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-slate-700'}`;
+            $('p2-flag').className = `w-3 h-3 rounded-full ${p2 > 0 ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-slate-700'}`;
 
             // P1_READY changed: broadcast the new step to the opponent
             if (p1 !== lastP1State) {
@@ -2084,6 +1882,8 @@
         function processIncomingSerialQueue() {
             const wram = getWram();
             if (!wram) return;
+
+            $('fifo-depth').innerText = `${incomingSerialQueue.length} pkts`;
 
             if (incomingSerialQueue.length === 0) return;
 
@@ -2207,9 +2007,7 @@
             return copy;
         }
 
-        // Auto-save SRAM periodically every 5 seconds if running.
-        // IndexedDB is asynchronous, so this does not perform a synchronous
-        // localStorage write on every interval.
+        // Auto-save SRAM periodically every 5 seconds if running
         setInterval(async () => {
             if (emulatorPtr) {
                 const sram = getEmulatorSramData();
@@ -2406,7 +2204,7 @@
             port: 443,
             path: PEERJS_PATH,
             secure: true,
-            debug: 0,
+            debug: 3,
             config: {
                 iceTransportPolicy: 'all',
                 iceServers: [
@@ -2436,6 +2234,41 @@
                 ],
             }
         };
+
+        function updateDebugOverlay() {
+            // Remove / hide debug overlay in phone mode (< 1024px)
+            if (window.innerWidth < 1024) {
+                const el = $('debug-overlay');
+                if (el) el.remove();
+                return;
+            }
+
+            const wram = getWram();
+            if (!wram) return;
+
+            let debugEl = $('debug-overlay');
+            if (!debugEl) {
+                debugEl = document.createElement('div');
+                debugEl.id = 'debug-overlay';
+                debugEl.className = 'fixed bottom-4 right-4 bg-black/80 text-green-400 font-mono text-[10px] p-3 rounded border border-slate-700 pointer-events-none z-50 space-y-1';
+                document.body.appendChild(debugEl);
+            }
+
+            const whoseTurn = wram[OFFSET_WHOSE_TURN];
+            const whoseTurnStr = whoseTurn === 0xC2 ? 'PLAYER' : (whoseTurn === 0xC3 ? 'OPPONENT' : '0x' + whoseTurn.toString(16));
+            debugEl.innerHTML = `
+                <div>wSerialOp  : 0x${wram[OFFSET_SERIAL_OP].toString(16).padStart(2, '0')}</div>
+                <div>wWhoseTurn : 0x${whoseTurn.toString(16).padStart(2, '0')} (${whoseTurnStr})</div>
+                <div>RNG        : [${wram[OFFSET_RNG]}, ${wram[OFFSET_RNG + 1]}, ${wram[OFFSET_RNG + 2]}]</div>
+                <div>P1_READY   : ${wram[OFFSET_P1_READY]}</div>
+                <div>P2_READY   : ${wram[OFFSET_P2_READY]}</div>
+                <div>SEND_QUEUE : ${wram[OFFSET_SERIAL_SEND_TOGGLE]} bytes</div>
+                <div>RECV_QUEUE : ${wram[OFFSET_SERIAL_RECV_COUNT]} bytes</div>
+                <div>FIFO_DEPTH : ${incomingSerialQueue.length} pkts</div>
+                <div>SEND_STATE : ${wram[OFFSET_SERIAL_SEND_STATE]}</div>
+                <div>RECV_STATE : ${wram[OFFSET_SERIAL_RECV_STATE]}</div>
+            `;
+        }
 
         function createHost() {
             if (peer) { log('Already have a PeerJS session.'); return; }
@@ -2676,28 +2509,24 @@
         };
 
         $('focus-overlay').onclick = () => {
-            if (audio?.ctx) {
-                audio.ctx.resume();
-                audio.setMuted(false);
-            }
+            audio?.ctx.resume();
             $('gb-canvas').focus();
             $('focus-overlay').classList.add('hidden');
         };
 
         $('gb-canvas').onclick = () => {
             $('gb-canvas').focus();
-            if (audio?.ctx?.state === 'suspended') {
-                audio.ctx.resume();
-            }
         };
 
-        // Ensure input listeners are active immediately
+        // Ensure input listeners and integer scaling are active immediately
         window.addEventListener('DOMContentLoaded', () => {
             setupInput();
             fitCanvasIntegerScale();
         });
         setupInput();
         fitCanvasIntegerScale();
+        window.addEventListener('resize', fitCanvasIntegerScale);
     </script>
 </body>
 </html>
+
