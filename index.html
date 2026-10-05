@@ -91,14 +91,14 @@
             pointer-events: none;
         }
 
-        /* Game Boy Screen Bezel — hugs integer-scaled screen */
+        /* Game Boy Screen Bezel — hugs integer-scaled screen tightly */
         .gb-screen-bezel {
             background: var(--gb-bezel-bg);
-            border: 3px solid var(--gb-bezel-border);
-            border-bottom: 4px solid #1a1e2b;
-            border-radius: 20px 20px 26px 26px;
+            border: 2px solid var(--gb-bezel-border);
+            border-bottom: 3px solid #1a1e2b;
+            border-radius: 14px;
             box-shadow: 
-                inset 0 3px 10px rgba(0, 0, 0, 0.95),
+                inset 0 2px 6px rgba(0, 0, 0, 0.95),
                 0 1px 1px rgba(255, 255, 255, 0.08);
             position: relative;
             overflow: hidden;
@@ -106,7 +106,7 @@
             max-width: 100%;
             margin-left: auto;
             margin-right: auto;
-            padding: 0.6rem;
+            padding: 4px;
             box-sizing: border-box;
         }
 
@@ -119,7 +119,7 @@
             right: 0;
             height: 38%;
             background: linear-gradient(180deg, rgba(255, 255, 255, 0.04) 0%, rgba(255, 255, 255, 0.0) 100%);
-            border-radius: 17px 17px 0 0;
+            border-radius: 12px 12px 0 0;
             pointer-events: none;
         }
 
@@ -148,8 +148,7 @@
             background: #000;
             border-radius: 0;
             overflow: hidden;
-            outline: 1px solid #27272a;
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            outline: none;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -163,15 +162,18 @@
 
         @media (max-width: 1023px) {
             #gb-chassis {
-                padding: 0.4rem !important;
-                width: 100%;
+                padding: 3px 2px !important;
+                width: fit-content;
                 max-width: 100%;
+                margin: 0 auto;
                 box-sizing: border-box;
             }
             .gb-screen-bezel {
-                padding: 0.4rem !important;
-                width: 100%;
+                padding: 2px !important;
+                border: 1.5px solid var(--gb-bezel-border) !important;
+                width: fit-content;
                 max-width: 100%;
+                margin: 0 auto;
                 box-sizing: border-box;
                 overflow: hidden;
             }
@@ -586,11 +588,11 @@
         </div>
     </header>
 
-    <!-- MAIN INTERFACE GRID -->
-    <main class="w-full max-w-6xl grid grid-cols-1 lg:grid-cols-12 gap-4 lg:gap-6 items-start">
+    <!-- MAIN INTERFACE: Maximizes Center Column for Maximum Game Boy Screen Scale -->
+    <main class="w-full max-w-[1440px] flex flex-col lg:flex-row gap-3 lg:gap-4 items-start justify-center px-1">
 
         <!-- LEFT COLUMN: FILE & SAVE MANAGEMENT + KEYBOARD GUIDE (Desktop) -->
-        <div id="panel-files-col" class="lg:col-span-3 lg:order-1 order-2 flex flex-col gap-4 w-full">
+        <div id="panel-files-col" class="lg:w-[240px] xl:w-[260px] lg:flex-shrink-0 lg:order-1 order-2 flex flex-col gap-3 w-full">
 
             <div class="bg-slate-900/90 p-4 rounded-2xl border border-slate-800 shadow-lg">
                 <h3 class="text-xs font-bold text-slate-400 mb-3 uppercase tracking-wider font-mono flex items-center justify-between">
@@ -684,8 +686,8 @@
 
         </div>
 
-        <!-- CENTER COLUMN: HANDHELD GAME BOY CONSOLE -->
-        <div class="lg:col-span-6 lg:order-2 order-1 flex flex-col items-center w-full">
+        <!-- CENTER COLUMN: HANDHELD GAME BOY CONSOLE (Takes all available space) -->
+        <div class="flex-1 flex flex-col items-center min-w-0 w-full lg:order-2 order-1">
             <div id="gb-chassis" class="gb-chassis relative select-none">
                 
                 <!-- Game Boy Screen Bezel -->
@@ -842,7 +844,7 @@
         </div>
 
         <!-- RIGHT COLUMN: CLEAN RELEASE LINK STATUS & LINK CHAT -->
-        <div id="panel-chat-col" class="lg:col-span-3 lg:order-3 order-3 flex flex-col gap-4 w-full">
+        <div id="panel-chat-col" class="lg:w-[240px] xl:w-[260px] lg:flex-shrink-0 lg:order-3 order-3 flex flex-col gap-3 w-full">
 
             <div class="bg-slate-900/90 p-4 rounded-2xl border border-slate-800 shadow-lg">
                 <h3 class="text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider font-mono">
@@ -1099,7 +1101,29 @@
             ctx.msImageSmoothingEnabled = false;
         }
 
+        let _lastDeviceScale = 0;
+        let _frameSrcCanvas = null;
+        let _frameSrcCtx = null;
+        let _displayCtx = null;
         let _reusableImg = null;
+
+        function getFrameSrc() {
+            if (!_frameSrcCanvas) {
+                _frameSrcCanvas = document.createElement('canvas');
+                _frameSrcCanvas.width = 160;
+                _frameSrcCanvas.height = 144;
+                _frameSrcCtx = _frameSrcCanvas.getContext('2d', { alpha: false });
+            }
+            return { canvas: _frameSrcCanvas, ctx: _frameSrcCtx };
+        }
+
+        function disableSmoothing(ctx) {
+            if (!ctx) return;
+            ctx.imageSmoothingEnabled = false;
+            ctx.mozImageSmoothingEnabled = false;
+            ctx.webkitImageSmoothingEnabled = false;
+            ctx.msImageSmoothingEnabled = false;
+        }
 
         function fitCanvasIntegerScale() {
             const canvas = $('gb-canvas');
@@ -1108,62 +1132,39 @@
 
             const dpr = window.devicePixelRatio || 1;
             const vw = document.documentElement.clientWidth || window.innerWidth || 360;
-            const vh = window.innerHeight || 640;
-            const isMobile = vw < 1024 ||
-                !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
+            const isMobile = vw < 1024;
 
-            let availCssW, availCssH;
+            let availCssW;
             if (isMobile) {
-                // Ensure room for chassis, bezel padding and borders symmetrically
-                const chromeX = 48;
-                availCssW = Math.max(160, vw - chromeX);
-                const reservedY = 52 + 44 + 190 + 8;
-                availCssH = Math.max(144, vh - reservedY);
+                // Maximize horizontal size on phone: minimal 4-6px margin
+                availCssW = Math.max(160, vw - 6);
             } else {
                 const chassis = $('gb-chassis');
                 const centerCol = chassis?.parentElement;
-                const colW = centerCol?.clientWidth || 560;
-                // Leave margins so desktop chassis never clips the canvas
-                availCssW = Math.max(160, Math.min(500, colW - 48));
-                availCssH = Math.max(144, Math.min(vh * 0.58, availCssW * (144 / 160) + 16));
+                const colW = centerCol?.clientWidth || (vw - 520);
+                availCssW = Math.max(160, colW - 8);
             }
 
-            let bufW, bufH, cssW, cssH;
+            // Target exact integer device pixels per GB pixel, maximized by available horizontal width
+            const availDevW = availCssW * dpr;
+            const deviceScale = Math.max(1, Math.floor(availDevW / 160));
 
-            // Only use device-pixel buffer on desktop when fractional display scaling (e.g. Windows 110%) is present
-            const hasFractionalDpr = !isMobile && Math.abs(dpr - Math.round(dpr)) >= 0.02;
+            const bufW = 160 * deviceScale;
+            const bufH = 144 * deviceScale;
+            const cssW = bufW / dpr;
+            const cssH = bufH / dpr;
 
-            if (hasFractionalDpr) {
-                const deviceScale = Math.max(1, Math.floor(Math.min(
-                    (availCssW * dpr) / 160,
-                    (availCssH * dpr) / 144
-                )));
-                bufW = 160 * deviceScale;
-                bufH = 144 * deviceScale;
-                cssW = bufW / dpr;
-                cssH = bufH / dpr;
-            } else {
-                // Mobile & integer DPR: Native 160x144 canvas, scaled by integer CSS multiplier (fastest on phone)
-                const cssScale = Math.max(1, Math.floor(Math.min(availCssW / 160, availCssH / 144)));
-                bufW = 160;
-                bufH = 144;
-                cssW = 160 * cssScale;
-                cssH = 144 * cssScale;
-            }
-
-            const cssWStr = Math.round(cssW) + 'px';
-            const cssHStr = Math.round(cssH) + 'px';
-            const scaleKey = bufW + 'x' + bufH + '@' + cssWStr;
-
-            if (scaleKey === _lastScaleKey && canvas.width === bufW && canvas.height === bufH) {
+            if (deviceScale === _lastDeviceScale &&
+                canvas.width === bufW &&
+                canvas.style.width === cssW + 'px') {
                 return;
             }
-            _lastScaleKey = scaleKey;
+            _lastDeviceScale = deviceScale;
 
-            canvas.style.width = cssWStr;
-            canvas.style.height = cssHStr;
-            wrap.style.width = cssWStr;
-            wrap.style.height = cssHStr;
+            canvas.style.width = cssW + 'px';
+            canvas.style.height = cssH + 'px';
+            wrap.style.width = cssW + 'px';
+            wrap.style.height = cssH + 'px';
 
             if (canvas.width !== bufW || canvas.height !== bufH) {
                 canvas.width = bufW;
@@ -1171,7 +1172,6 @@
                 _displayCtx = null;
             }
 
-            _displayCanvas = canvas;
             if (!_displayCtx) {
                 _displayCtx = canvas.getContext('2d', { alpha: false });
             }
@@ -1179,28 +1179,21 @@
         }
 
         function blitFrame(frameData) {
-            const canvas = _displayCanvas || $('gb-canvas');
+            const { canvas: src, ctx: srcCtx } = getFrameSrc();
+            if (!_reusableImg) {
+                _reusableImg = srcCtx.createImageData(160, 144);
+            }
+            _reusableImg.data.set(frameData);
+            srcCtx.putImageData(_reusableImg, 0, 0);
+
+            const canvas = $('gb-canvas');
             if (!canvas) return;
             if (!_displayCtx) {
                 _displayCtx = canvas.getContext('2d', { alpha: false });
-                disableSmoothing(_displayCtx);
             }
-
-            if (!_reusableImg) {
-                _reusableImg = _displayCtx.createImageData(160, 144);
-            }
-            _reusableImg.data.set(frameData);
-
-            if (canvas.width === 160 && canvas.height === 144) {
-                // Direct blit: zero allocations, zero GPU rescaling latency
-                _displayCtx.putImageData(_reusableImg, 0, 0);
-            } else {
-                // Desktop fractional DPR path
-                const { canvas: src, ctx: srcCtx } = getFrameSrc();
-                srcCtx.putImageData(_reusableImg, 0, 0);
-                disableSmoothing(_displayCtx);
-                _displayCtx.drawImage(src, 0, 0, 160, 144, 0, 0, canvas.width, canvas.height);
-            }
+            disableSmoothing(_displayCtx);
+            // Hardware GPU texture blit (high-performance integer scaling)
+            _displayCtx.drawImage(src, 0, 0, 160, 144, 0, 0, canvas.width, canvas.height);
         }
 
         // ============================================================
@@ -2536,6 +2529,13 @@
         });
         setupInput();
         fitCanvasIntegerScale();
+
+        if (window.ResizeObserver) {
+            new ResizeObserver(() => {
+                fitCanvasIntegerScale();
+            }).observe(document.body);
+        }
+        window.addEventListener('resize', fitCanvasIntegerScale);
     </script>
 </body>
 </html>
