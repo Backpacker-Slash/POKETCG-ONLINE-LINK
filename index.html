@@ -1111,21 +1111,30 @@
 
             const dpr = window.devicePixelRatio || 1;
             const vw = document.documentElement.clientWidth || window.innerWidth || 360;
+            const vh = window.innerHeight || 640;
             const isMobile = vw < 1024;
 
-            let availCssW;
+            let cssScale;
             if (isMobile) {
-                // Maximize horizontal size on phone: minimal 4-6px margin
-                availCssW = Math.max(160, vw - 6);
+                // Phone mode: maximize horizontal size on phone display (Scale 2 = 320px)
+                const availCssW = Math.max(160, vw - 6);
+                cssScale = Math.max(1, Math.floor(availCssW / 160));
             } else {
+                // Desktop mode: fit the whole handheld Game Boy console on the monitor without vertical scrolling!
+                // Header (50px) + chassis bezel accents & controller area (~270px) + page margins (~20px) = ~340px
+                const reservedY = 340;
+                const maxScreenH = Math.max(144, vh - reservedY);
                 const chassis = $('gb-chassis');
                 const centerCol = chassis?.parentElement;
                 const colW = centerCol?.clientWidth || (vw - 520);
-                availCssW = Math.max(160, colW - 8);
+                const maxScreenW = Math.max(160, colW - 8);
+
+                // Both width and height must fit the whole console, capped at 3x for a compact desktop handheld
+                const scaleByH = Math.floor(maxScreenH / 144);
+                const scaleByW = Math.floor(maxScreenW / 160);
+                cssScale = Math.max(1, Math.min(3, scaleByH, scaleByW));
             }
 
-            // Maximize CSS integer scale directly from available horizontal width
-            const cssScale = Math.max(1, Math.floor(availCssW / 160));
             const cssW = 160 * cssScale;
             const cssH = 144 * cssScale;
 
