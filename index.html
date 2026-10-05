@@ -59,6 +59,11 @@
                 inset 0 -3px 6px rgba(0, 0, 0, 0.6);
             position: relative;
             transition: all 0.2s ease;
+            width: fit-content;
+            max-width: 100%;
+            margin-left: auto;
+            margin-right: auto;
+            padding: 0.75rem;
         }
 
         /* Subtle curved grip indent on Game Boy sides */
@@ -86,7 +91,7 @@
             pointer-events: none;
         }
 
-        /* Game Boy Screen Bezel */
+        /* Game Boy Screen Bezel — hugs integer-scaled screen */
         .gb-screen-bezel {
             background: var(--gb-bezel-bg);
             border: 3px solid var(--gb-bezel-border);
@@ -96,7 +101,7 @@
                 inset 0 3px 10px rgba(0, 0, 0, 0.95),
                 0 1px 1px rgba(255, 255, 255, 0.08);
             position: relative;
-            overflow: hidden;
+            overflow: visible;
             width: fit-content;
             max-width: 100%;
             margin-left: auto;
@@ -125,40 +130,53 @@
             height: 144px;
             background: #000;
             outline: none;
+            border: none;
             display: block;
             flex-shrink: 0;
-            margin: 0 auto;
+            margin: 0;
+            padding: 0;
+            box-sizing: content-box !important;
+            vertical-align: top;
         }
 
+        /* Screen frame hugs canvas without eating into pixel area */
         #gb-screen-wrap {
             position: relative;
             width: 160px;
             height: 144px;
             background: #000;
-            border-radius: 0.5rem;
+            border-radius: 0;
             overflow: hidden;
-            border: 1px solid #27272a;
+            outline: 1px solid #27272a;
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
             display: block;
             margin: 0 auto;
+            padding: 0;
+            border: none;
             flex-shrink: 0;
+            box-sizing: content-box !important;
+            line-height: 0;
         }
 
         @media (max-width: 1023px) {
             #gb-chassis {
                 padding: 0.4rem !important;
-                width: 100%;
-                max-width: 100%;
+                width: fit-content;
+                max-width: calc(100% - 4px);
                 box-sizing: border-box;
             }
             .gb-screen-bezel {
-                padding: 0.4rem !important;
-                width: 100%;
+                padding: 0.35rem !important;
+                width: fit-content;
                 max-width: 100%;
                 box-sizing: border-box;
+                overflow: visible;
             }
             #gb-screen-wrap {
-                max-width: 100%;
+                max-width: none;
+            }
+            #gb-canvas {
+                max-width: none;
             }
         }
 
@@ -331,6 +349,7 @@
             touch-action: none;
             transition: transform 0.04s ease, box-shadow 0.04s ease;
             text-shadow: 0 -1px 1px rgba(0, 0, 0, 0.8), 0 1px 2px rgba(255, 255, 255, 0.35);
+            -webkit-tap-highlight-color: transparent;
         }
 
         @media (min-width: 640px) {
@@ -341,13 +360,67 @@
             }
         }
 
-        .btn-action:active, .btn-action.pressed {
-            background: var(--action-btn-pressed);
-            box-shadow: 
-                inset 0 4px 8px rgba(0, 0, 0, 0.95),
-                0 2px 4px rgba(0, 0, 0, 0.5);
-            transform: translateY(2.5px) scale(0.96);
-            color: #fbcfe8;
+        /* Desktop-only pressed look (hover-capable devices). */
+        @media (hover: hover) and (pointer: fine) {
+            .btn-action:active, .btn-action.pressed {
+                background: var(--action-btn-pressed);
+                box-shadow: 
+                    inset 0 4px 8px rgba(0, 0, 0, 0.95),
+                    0 2px 4px rgba(0, 0, 0, 0.5);
+                transform: translateY(2.5px) scale(0.96);
+                color: #fbcfe8;
+            }
+        }
+
+        /* Mobile: ZERO optical feedback on A/B (and all GB buttons).
+           No :active paint, no transitions, no transform — spam taps stay ultra fast. */
+        @media (hover: none), (pointer: coarse) {
+            .btn-action,
+            .btn-action:active,
+            .btn-action.pressed,
+            .btn-action:focus,
+            .btn-action:focus-visible {
+                transition: none !important;
+                transform: none !important;
+                background: var(--action-btn-bg) !important;
+                box-shadow:
+                    0 6px 14px rgba(0, 0, 0, 0.75),
+                    inset 0 2px 3px rgba(255, 255, 255, 0.45),
+                    inset 0 -3px 5px rgba(0, 0, 0, 0.65) !important;
+                color: #fff1f2 !important;
+                filter: none !important;
+                opacity: 1 !important;
+                outline: none !important;
+            }
+            .dpad-btn,
+            .dpad-btn:active,
+            .dpad-btn.pressed,
+            .btn-pill,
+            .btn-pill:active,
+            .btn-pill.pressed {
+                transition: none !important;
+                transform: none !important;
+            }
+            .dpad-btn:active,
+            .dpad-btn.pressed {
+                background: var(--dpad-plastic) !important;
+                box-shadow:
+                    0 4px 6px rgba(0, 0, 0, 0.6),
+                    inset 0 1px 1px rgba(255, 255, 255, 0.25) !important;
+            }
+            .dpad-btn:active span,
+            .dpad-btn.pressed span {
+                color: #64748b !important;
+                transform: none !important;
+                text-shadow: 0 1px 1px rgba(0, 0, 0, 0.8) !important;
+            }
+            .btn-pill:active,
+            .btn-pill.pressed {
+                background: linear-gradient(180deg, #475569 0%, #334155 70%, #1e293b 100%) !important;
+                box-shadow:
+                    0 3px 6px rgba(0, 0, 0, 0.6),
+                    inset 0 1px 1px rgba(255, 255, 255, 0.25) !important;
+            }
         }
 
         /* Pill Buttons (Select & Start) */
@@ -444,22 +517,13 @@
             }
         }
 
-        /* Log Line Styling */
-        .log-line {
-            border-left: 2px solid #38bdf8;
-            padding-left: 8px;
-            margin-bottom: 4px;
-            font-size: 0.72rem;
-            line-height: 1.35;
-        }
-
         .hide-scroll::-webkit-scrollbar {
             display: none;
         }
     </style>
 </head>
 
-<body class="p-2 sm:p-4 flex flex-col items-center min-h-[100dvh]">
+<body class="px-1 py-2 sm:p-4 flex flex-col items-center min-h-[100dvh]">
 
     <!-- TOP HEADER & CONNECTION BAR -->
     <header class="w-full max-w-6xl flex flex-wrap justify-between items-center gap-2.5 sm:gap-4 mb-3 sm:mb-4 bg-slate-900/90 p-2.5 sm:p-4 rounded-2xl border border-slate-800 shadow-xl backdrop-blur">
@@ -613,39 +677,14 @@
                 </div>
             </div>
 
-            <!-- System Logs -->
-            <div id="panel-logs-col" class="bg-slate-900/90 p-4 rounded-2xl border border-slate-800 shadow-lg flex flex-col overflow-hidden max-h-[300px]">
-                <div class="flex items-center justify-between mb-2">
-                    <h3 class="text-xs font-bold text-slate-400 uppercase tracking-wider font-mono">
-                        System Log
-                    </h3>
-                    <button
-                        id="btn-copy-logs"
-                        type="button"
-                        class="bg-slate-800 hover:bg-slate-700 active:scale-95 text-sky-400 hover:text-sky-300 text-[10px] font-mono font-bold px-2 py-0.5 rounded-lg border border-slate-700 transition flex items-center gap-1 cursor-pointer"
-                        title="Copy entire logs content to clipboard"
-                    >
-                        <span>📋</span> <span id="copy-logs-text">COPY LOGS</span>
-                    </button>
-                </div>
-
-                <div
-                    id="system-logs"
-                    class="overflow-y-auto flex-1 font-mono text-slate-300 hide-scroll text-[11px] pr-1"
-                >
-                    <div class="log-line text-slate-400">
-                        Ready to load files...
-                    </div>
-                </div>
-            </div>
         </div>
 
         <!-- CENTER COLUMN: HANDHELD GAME BOY CONSOLE -->
         <div class="lg:col-span-6 lg:order-2 order-1 flex flex-col items-center w-full">
-            <div id="gb-chassis" class="gb-chassis w-full max-w-[460px] p-3.5 sm:p-5 relative select-none">
+            <div id="gb-chassis" class="gb-chassis relative select-none">
                 
                 <!-- Game Boy Screen Bezel -->
-                <div class="gb-screen-bezel p-3 sm:p-4 relative flex flex-col items-center">
+                <div class="gb-screen-bezel relative flex flex-col items-center">
                     
                     <!-- Top bezel accents: Power LED & Stereo indicator -->
                     <div class="w-full flex items-center justify-between text-[10px] text-zinc-500 font-sans font-bold px-1 mb-2">
@@ -750,17 +789,15 @@
                                     <button type="button" data-gb-btn="B" class="btn-action btn-b" aria-label="Button B">
                                         B
                                     </button>
-                                    <span class="text-[10px] font-black text-slate-400 italic tracking-wider mt-1 rotate-[25deg]">B</span>
                                 </div>
                                 <!-- Button A -->
                                 <div class="flex flex-col items-center">
                                     <button type="button" data-gb-btn="A" class="btn-action btn-a" aria-label="Button A">
                                         A
                                     </button>
-                                    <span class="text-[10px] font-black text-slate-400 italic tracking-wider mt-1 rotate-[25deg]">A</span>
                                 </div>
                             </div>
-                            <span class="text-[9px] font-bold text-slate-500 tracking-wider mt-1.5 uppercase font-mono">Action</span>
+                            <span class="text-[9px] font-bold text-slate-500 tracking-wider mt-1.5 rotate-[-25deg] uppercase font-mono">Action</span>
                         </div>
 
                     </div>
@@ -796,44 +833,30 @@
                 <button type="button" class="mobile-tab-btn flex-1 py-2 text-[11px] font-bold rounded-xl text-slate-400 hover:text-white transition cursor-pointer" data-tab="chat">
                     💬 Chat & Sync
                 </button>
-                <button type="button" class="mobile-tab-btn flex-1 py-2 text-[11px] font-bold rounded-xl text-slate-400 hover:text-white transition cursor-pointer" data-tab="logs">
-                    📋 Logs
-                </button>
             </div>
         </div>
 
-        <!-- RIGHT COLUMN: RAM SYNC STATUS & LINK CHAT -->
+        <!-- RIGHT COLUMN: CLEAN RELEASE LINK STATUS & LINK CHAT -->
         <div id="panel-chat-col" class="lg:col-span-3 lg:order-3 order-3 flex flex-col gap-4 w-full">
 
             <div class="bg-slate-900/90 p-4 rounded-2xl border border-slate-800 shadow-lg">
                 <h3 class="text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider font-mono">
-                    RAM Sync Status
+                    Link Status
                 </h3>
 
-                <div class="flex justify-between items-center bg-slate-950 p-2 rounded-xl mb-1.5 border border-slate-800/80">
-                    <span class="text-[10px] text-slate-400 font-mono">P1_READY ($C5FD)</span>
-                    <div class="flex items-center gap-2">
-                        <span id="p1-val" class="text-[10px] font-bold text-slate-300 font-mono">0</span>
-                        <span id="p1-flag" class="w-2.5 h-2.5 rounded-full bg-slate-700"></span>
-                    </div>
+                <div class="flex items-center justify-between gap-3 bg-slate-950 p-2.5 rounded-xl mb-1.5 border border-slate-800/80">
+                    <span class="text-[10px] text-slate-400 font-mono tracking-wide">YOU</span>
+                    <span id="p1-flag" class="w-3 h-3 rounded-full bg-slate-700" title="Ready"></span>
                 </div>
 
-                <div class="flex justify-between items-center bg-slate-950 p-2 rounded-xl mb-1.5 border border-slate-800/80">
-                    <span class="text-[10px] text-slate-400 font-mono">P2_READY ($C5FE)</span>
-                    <div class="flex items-center gap-2">
-                        <span id="p2-val" class="text-[10px] font-bold text-slate-300 font-mono">0</span>
-                        <span id="p2-flag" class="w-2.5 h-2.5 rounded-full bg-slate-700"></span>
-                    </div>
+                <div class="flex items-center justify-between gap-3 bg-slate-950 p-2.5 rounded-xl mb-1.5 border border-slate-800/80">
+                    <span class="text-[10px] text-slate-400 font-mono tracking-wide">OPPONENT</span>
+                    <span id="p2-flag" class="w-3 h-3 rounded-full bg-slate-700" title="Ready"></span>
                 </div>
 
-                <div class="flex justify-between items-center bg-slate-950 p-2 rounded-xl mb-1.5 border border-slate-800/80">
-                    <span class="text-[10px] text-slate-400 font-mono">FIFO QUEUE</span>
-                    <span id="fifo-depth" class="text-[10px] text-sky-400 font-bold font-mono">0 pkts</span>
-                </div>
-
-                <div class="flex justify-between items-center bg-slate-950 p-2 rounded-xl border border-slate-800/80">
-                    <span class="text-[10px] text-slate-400 font-mono">OPPONENT</span>
-                    <span id="opp-name-tag" class="text-[10px] text-sky-400 font-bold truncate max-w-[120px] font-mono">
+                <div class="flex justify-between items-center bg-slate-950 p-2.5 rounded-xl border border-slate-800/80">
+                    <span class="text-[10px] text-slate-400 font-mono">NAME</span>
+                    <span id="opp-name-tag" class="text-[10px] text-sky-400 font-bold truncate max-w-[140px] font-mono">
                         NONE
                     </span>
                 </div>
@@ -866,56 +889,8 @@
     <script>
         const $ = (id) => document.getElementById(id);
 
-        const logHistory = ["[Ready to load files...]"];
-
-        const log = (msg) => {
-            const timeStr = new Date().toLocaleTimeString();
-            const formatted = `[${timeStr}] ${msg}`;
-            logHistory.push(formatted);
-            const div = document.createElement('div');
-            div.className = 'log-line';
-            div.innerText = formatted;
-            const container = $('system-logs');
-            if (container) {
-                container.appendChild(div);
-                container.scrollTop = container.scrollHeight;
-            }
-        };
-
-        const copyLogsToClipboard = async () => {
-            const logsEl = $('system-logs');
-            const textToCopy = logHistory.length > 0 
-                ? logHistory.join('\n') 
-                : (logsEl ? Array.from(logsEl.querySelectorAll('.log-line')).map(l => l.innerText.trim()).join('\n') : '');
-
-            if (!textToCopy) return;
-
-            try {
-                await navigator.clipboard.writeText(textToCopy);
-            } catch (_) {
-                const ta = document.createElement('textarea');
-                ta.value = textToCopy;
-                ta.style.position = 'fixed';
-                ta.style.opacity = '0';
-                document.body.appendChild(ta);
-                ta.focus();
-                ta.select();
-                try { document.execCommand('copy'); } catch (_) {}
-                document.body.removeChild(ta);
-            }
-
-            const btnText = $('copy-logs-text');
-            if (btnText) {
-                const orig = btnText.innerText;
-                btnText.innerText = 'COPIED!';
-                setTimeout(() => { btnText.innerText = orig; }, 1500);
-            }
-        };
-
-        const btnCopyLogs = $('btn-copy-logs');
-        if (btnCopyLogs) {
-            btnCopyLogs.onclick = copyLogsToClipboard;
-        }
+        // Release build: logging disabled
+        const log = (_msg) => {};
 
         // ============================================================
         // RAM OFFSETS (Base address = $C000)
@@ -1026,6 +1001,10 @@
             constructor(m, e) {
                 this.ctx = new (window.AudioContext || window.webkitAudioContext)();
                 this.module = m;
+                this.muted = false;
+                this.gain = this.ctx.createGain();
+                this.gain.gain.value = 1;
+                this.gain.connect(this.ctx.destination);
                 const getPtr = getExport('get_audio_buffer_ptr');
                 const getCap = getExport('get_audio_buffer_capacity');
                 if (getPtr && getCap) {
@@ -1036,12 +1015,28 @@
                 this.startSec = 0;
             }
 
-            push() {
-                if (!this.ctx) return;
-                if (this.ctx.state === 'suspended') {
-                    this.ctx.resume();
-                    return;
+            setMuted(muted) {
+                this.muted = !!muted;
+                if (this.gain) {
+                    this.gain.gain.value = this.muted ? 0 : 1;
                 }
+                const icon = $('audio-icon');
+                if (icon) icon.innerText = this.muted ? '🔇' : '🔊';
+            }
+
+            toggleMute() {
+                this.setMuted(!this.muted);
+                if (!this.muted && this.ctx && this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+                return this.muted;
+            }
+
+            push() {
+                if (!this.ctx || this.muted) return;
+                if (this.ctx.state === 'suspended') return;
+                if (!this.buffer) return;
+
                 const nowSec = this.ctx.currentTime;
                 const latency = 0.08;
                 if (!this.startSec || this.startSec < nowSec || this.startSec > nowSec + 0.25) {
@@ -1049,33 +1044,37 @@
                 }
 
                 const frames = 4096;
-                const buffer = this.ctx.createBuffer(2, frames, this.ctx.sampleRate);
+                const maxSamples = Math.floor((this.buffer.length || 0) / 2);
+                const useFrames = Math.min(frames, maxSamples || frames);
+
+                const buffer = this.ctx.createBuffer(2, useFrames, this.ctx.sampleRate);
                 const c0 = buffer.getChannelData(0);
                 const c1 = buffer.getChannelData(1);
 
-                for (let i = 0; i < frames; i++) {
+                for (let i = 0; i < useFrames; i++) {
                     c0[i] = (this.buffer[2 * i] / 255) * 0.4;
                     c1[i] = (this.buffer[2 * i + 1] / 255) * 0.4;
                 }
 
                 const source = this.ctx.createBufferSource();
                 source.buffer = buffer;
-                source.connect(this.ctx.destination);
+                source.connect(this.gain);
                 source.onended = () => {
                     try { source.disconnect(); } catch (_) {}
                 };
                 source.start(this.startSec);
-                this.startSec += frames / this.ctx.sampleRate;
+                this.startSec += useFrames / this.ctx.sampleRate;
             }
         }
 
         // ============================================================
-        // INTEGER PIXEL SCALE — device pixels (fixes fractional DPR & phone lag)
+        // INTEGER PIXEL SCALE (HARDWARE-ACCELERATED & ZERO CLIPPING)
         // ============================================================
-        let _lastDeviceScale = 0;
+        let _lastScaleKey = '';
         let _frameSrcCanvas = null;
         let _frameSrcCtx = null;
         let _displayCtx = null;
+        let _displayCanvas = null;
 
         function getFrameSrc() {
             if (!_frameSrcCanvas) {
@@ -1103,22 +1102,25 @@
             const dpr = window.devicePixelRatio || 1;
             const vw = document.documentElement.clientWidth || window.innerWidth || 360;
             const vh = window.innerHeight || 640;
-            const isMobile = vw < 1024;
+            const isMobile = vw < 1024 ||
+                !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
 
             let availCssW, availCssH;
             if (isMobile) {
-                availCssW = Math.max(160, vw - 4 - 12);
+                // Room for padding on mobile
+                availCssW = Math.max(160, vw - 24);
                 const reservedY = 52 + 44 + 190 + 8;
                 availCssH = Math.max(144, vh - reservedY);
             } else {
                 const chassis = $('gb-chassis');
                 const centerCol = chassis?.parentElement;
                 const colW = centerCol?.clientWidth || 560;
-                availCssW = Math.max(160, colW - 24);
-                availCssH = Math.max(144, Math.min(vh * 0.65, availCssW * (144 / 160) + 16));
+                // Leave margins so desktop chassis never clips the canvas
+                availCssW = Math.max(160, Math.min(500, colW - 40));
+                availCssH = Math.max(144, Math.min(vh * 0.58, availCssW * (144 / 160) + 16));
             }
 
-            // Work in device pixels so height and width both land on integers.
+            // Target exact integer device pixels per GB pixel
             const availDevW = availCssW * dpr;
             const availDevH = availCssH * dpr;
             const deviceScale = Math.max(1, Math.floor(Math.min(
@@ -1131,17 +1133,19 @@
             const cssW = bufW / dpr;
             const cssH = bufH / dpr;
 
-            if (deviceScale === _lastDeviceScale &&
-                canvas.width === bufW &&
-                canvas.style.width === cssW + 'px') {
+            const cssWStr = (Math.round(cssW * 1000) / 1000) + 'px';
+            const cssHStr = (Math.round(cssH * 1000) / 1000) + 'px';
+            const scaleKey = bufW + 'x' + bufH + '@' + cssWStr;
+
+            if (scaleKey === _lastScaleKey && canvas.width === bufW && canvas.height === bufH) {
                 return;
             }
-            _lastDeviceScale = deviceScale;
+            _lastScaleKey = scaleKey;
 
-            canvas.style.width = cssW + 'px';
-            canvas.style.height = cssH + 'px';
-            wrap.style.width = cssW + 'px';
-            wrap.style.height = cssH + 'px';
+            canvas.style.width = cssWStr;
+            canvas.style.height = cssHStr;
+            wrap.style.width = cssWStr;
+            wrap.style.height = cssHStr;
 
             if (canvas.width !== bufW || canvas.height !== bufH) {
                 canvas.width = bufW;
@@ -1149,6 +1153,7 @@
                 _displayCtx = null;
             }
 
+            _displayCanvas = canvas;
             if (!_displayCtx) {
                 _displayCtx = canvas.getContext('2d', { alpha: false });
             }
@@ -1165,14 +1170,15 @@
             }
             srcCtx.putImageData(img, 0, 0);
 
-            const canvas = $('gb-canvas');
-            if (!canvas) return;
+            if (!_displayCanvas) _displayCanvas = $('gb-canvas');
+            if (!_displayCanvas) return;
             if (!_displayCtx) {
-                _displayCtx = canvas.getContext('2d', { alpha: false });
+                _displayCtx = _displayCanvas.getContext('2d', { alpha: false });
             }
             disableSmoothing(_displayCtx);
-            // Each GB pixel -> deviceScale x deviceScale hardware accelerated on-screen blit
-            _displayCtx.drawImage(src, 0, 0, 160, 144, 0, 0, canvas.width, canvas.height);
+
+            // Hardware GPU texture blit (smooth 60fps on phones with nearest-neighbor crisp pixels)
+            _displayCtx.drawImage(src, 0, 0, 160, 144, 0, 0, _displayCanvas.width, _displayCanvas.height);
         }
 
         // ============================================================
@@ -1233,15 +1239,14 @@
             // 1. Write to wOpponentName_ ($DD62 in WRAM1)
             wram.fill(0, OFFSET_OPPONENT_NAME, OFFSET_OPPONENT_NAME + NAME_BUFFER_LENGTH);
             wram.set(nameSlice, OFFSET_OPPONENT_NAME);
-            wram[OFFSET_OPPONENT_NAME + nameSlice.length] = 0x00; // Explicit TX_END
+            wram[OFFSET_OPPONENT_NAME + nameSlice.length] = 0x00;
 
             // 2. Also write to wNameBuffer ($C500 in WRAM0)
             wram.fill(0, OFFSET_NAME_BUFFER, OFFSET_NAME_BUFFER + NAME_BUFFER_LENGTH);
             wram.set(nameSlice, OFFSET_NAME_BUFFER);
-            wram[OFFSET_NAME_BUFFER + nameSlice.length] = 0x00; // Explicit TX_END
+            wram[OFFSET_NAME_BUFFER + nameSlice.length] = 0x00;
 
             $('opp-name-tag').innerText = readGbcString(OFFSET_OPPONENT_NAME) || remotePlayerName || "LINK PARTNER";
-            log(`[RAM] Opponent name stored in $DD62 & $C500 (${nameSlice.length} bytes).`);
         }
 
         function writeOpponentDeckBytes(deckCards) {
@@ -1250,7 +1255,6 @@
 
             const cards = deckCards.slice(0, DECK_SIZE);
             wram.set(new Uint8Array(cards), OFFSET_OPPONENT_DECK);
-            log(`[RAM] Opponent deck stored in $C480 (${cards.length} cards).`);
         }
 
         // ============================================================
@@ -1258,7 +1262,11 @@
         // ============================================================
         async function initEmulator(romBuffer, savBuffer = null) {
             if (animationFrameReq) cancelAnimationFrame(animationFrameReq);
-            log("Booting WASM...");
+
+            if (audio?.ctx) {
+                try { await audio.ctx.close(); } catch (_) {}
+            }
+            audio = null;
 
             module = await Binjgb();
             wramCachedPtr = null;
@@ -1288,7 +1296,6 @@
                     if (saveArray.length <= bufSize) {
                         makeWasmBuffer(bufPtr, bufSize).set(saveArray);
                         readExtRam(emulatorPtr, fileDataPtr);
-                        log(`SRAM Loaded: ${saveArray.length} bytes.`);
                     }
                     fileDataDelete(fileDataPtr);
                 }
@@ -1299,6 +1306,8 @@
             if (jNew && jSet) {
                 joypadPtr = jNew();
                 jSet(emulatorPtr, joypadPtr);
+                refreshJoypadFns();
+                refreshButtonElementCache();
                 setupInput();
             }
 
@@ -1311,20 +1320,19 @@
             $('btn-download-sav').disabled = false;
             $('btn-save-now').disabled = false;
 
-            // Light up Game Boy Power LED (green with soft glow)
             const pLed = $('power-led');
             if (pLed) {
                 pLed.className = 'w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_#10b981] border border-emerald-400 transition-all';
             }
 
-            // Clean up any held button states
             resetAllButtons();
 
-            // Size canvas to exact integer multiple of 160×144 after layout settles.
             requestAnimationFrame(() => {
                 fitCanvasIntegerScale();
                 setTimeout(fitCanvasIntegerScale, 50);
             });
+
+            if (audio) audio.setMuted(false);
 
             tick();
         }
@@ -1341,54 +1349,108 @@
         };
 
         const pressedButtons = new Set();
+        const joypadFns = Object.create(null);
+        const buttonElementCache = new Map();
+
+        // Disable JS visual feedback on touch devices to eliminate all input lag
+        const IS_COARSE_POINTER = !!(
+            window.matchMedia &&
+            (window.matchMedia('(hover: none)').matches ||
+             window.matchMedia('(pointer: coarse)').matches)
+        );
+        const USE_JS_VISUAL_FEEDBACK = !IS_COARSE_POINTER;
+
+        const actionPointerIds = new Map();
+        const actionPointerToButton = new Map();
+        const actionTouchIds = new Map();
+        const actionBtnTouchCounts = Object.create(null);
+
+        function refreshButtonElementCache() {
+            buttonElementCache.clear();
+            document.querySelectorAll('[data-gb-btn]').forEach(el => {
+                const btn = el.getAttribute('data-gb-btn');
+                if (!btn) return;
+                if (!buttonElementCache.has(btn)) buttonElementCache.set(btn, []);
+                buttonElementCache.get(btn).push(el);
+            });
+        }
+
+        function getButtonElements(btn) {
+            let els = buttonElementCache.get(btn);
+            if (!els || els.length === 0 || els.some(el => !el.isConnected)) {
+                refreshButtonElementCache();
+                els = buttonElementCache.get(btn) || [];
+            }
+            return els;
+        }
+
+        function refreshJoypadFns() {
+            for (const btn of Object.keys(JOYPAD_EXPORT_NAMES)) {
+                joypadFns[btn] = getExport(JOYPAD_EXPORT_NAMES[btn]);
+            }
+        }
+
+        const desiredButtonStates = Object.create(null);
+        const appliedButtonStates = Object.create(null);
 
         function setButtonState(btn, isPressed) {
-            if (isPressed) pressedButtons.add(btn);
+            const state = !!isPressed;
+            if (desiredButtonStates[btn] === state) return;
+
+            if (state) pressedButtons.add(btn);
             else pressedButtons.delete(btn);
+            desiredButtonStates[btn] = state;
 
-            if (emulatorPtr && module) {
-                const exportName = JOYPAD_EXPORT_NAMES[btn];
-                if (exportName) {
-                    const fn = getExport(exportName);
-                    if (fn) {
-                        try {
-                            fn(emulatorPtr, isPressed ? 1 : 0);
-                        } catch (err) {
-                            console.error('Error sending joypad input:', err);
-                        }
-                    }
-                }
+            // Desktop only: visual feedback. Mobile keeps zero DOM operations on button presses.
+            if (USE_JS_VISUAL_FEEDBACK) {
+                const els = getButtonElements(btn);
+                els.forEach(el => el.classList.toggle('pressed', state));
             }
+        }
 
-            // Visual feedback on all matching on-screen buttons
-            const els = document.querySelectorAll(`[data-gb-btn="${btn}"]`);
-            els.forEach(el => {
-                if (isPressed) el.classList.add('pressed');
-                else el.classList.remove('pressed');
-            });
+        function flushJoypadStates() {
+            if (!emulatorPtr || !module) return;
 
-            // Haptic vibration on phones (if supported)
-            if (isPressed && navigator.vibrate) {
-                try { navigator.vibrate(10); } catch (_) {}
+            for (const btn of Object.keys(JOYPAD_EXPORT_NAMES)) {
+                const desired = !!desiredButtonStates[btn];
+                const applied = !!appliedButtonStates[btn];
+                if (desired === applied) continue;
+
+                let fn = joypadFns[btn];
+                if (!fn) {
+                    fn = getExport(JOYPAD_EXPORT_NAMES[btn]);
+                    joypadFns[btn] = fn;
+                }
+                if (fn) {
+                    try {
+                        fn(emulatorPtr, desired ? 1 : 0);
+                        appliedButtonStates[btn] = desired;
+                    } catch (_) {}
+                }
             }
         }
 
         function resetAllButtons() {
             const all = ['up', 'down', 'left', 'right', 'A', 'B', 'start', 'select'];
-            all.forEach(btn => {
-                pressedButtons.delete(btn);
-                if (emulatorPtr && module) {
-                    const exportName = JOYPAD_EXPORT_NAMES[btn];
-                    if (exportName) {
-                        const fn = getExport(exportName);
-                        if (fn) {
-                            try { fn(emulatorPtr, 0); } catch (_) {}
-                        }
-                    }
+
+            pressedButtons.clear();
+            actionPointerIds.clear();
+            actionPointerToButton.clear();
+            actionTouchIds.clear();
+            for (const k of Object.keys(actionBtnTouchCounts)) {
+                actionBtnTouchCounts[k] = 0;
+            }
+
+            for (const btn of all) {
+                desiredButtonStates[btn] = false;
+                appliedButtonStates[btn] = false;
+
+                if (USE_JS_VISUAL_FEEDBACK) {
+                    getButtonElements(btn).forEach(el => el.classList.remove('pressed'));
                 }
-                const els = document.querySelectorAll(`[data-gb-btn="${btn}"]`);
-                els.forEach(el => el.classList.remove('pressed'));
-            });
+            }
+
+            flushJoypadStates();
         }
 
         let inputSetupDone = false;
@@ -1397,10 +1459,6 @@
             if (inputSetupDone) return;
             inputSetupDone = true;
 
-            // ========================================================
-            // MULTI-TOUCH ENGINE: Tracks touches by identifier so
-            // left thumb on D-Pad and right thumb on A/B work simultaneously!
-            // ========================================================
             const dpadCross = $('dpad-cross');
             let dpadTouchId = null;
             let currentDpadDirs = new Set();
@@ -1415,15 +1473,11 @@
                 const dist = Math.hypot(dx, dy);
 
                 const dirs = new Set();
-                if (dist > 10) { // 10px deadzone
-                    const angle = Math.atan2(dy, dx) * 180 / Math.PI; // -180 to 180 deg
-                    // Up: -157.5 to -22.5
+                if (dist > 10) {
+                    const angle = Math.atan2(dy, dx) * 180 / Math.PI;
                     if (angle < -22.5 && angle > -157.5) dirs.add('up');
-                    // Down: 22.5 to 157.5
                     if (angle > 22.5 && angle < 157.5) dirs.add('down');
-                    // Right: -67.5 to 67.5
                     if (angle > -67.5 && angle < 67.5) dirs.add('right');
-                    // Left: > 112.5 or < -112.5
                     if (angle > 112.5 || angle < -112.5) dirs.add('left');
                 }
                 return dirs;
@@ -1439,7 +1493,6 @@
                 currentDpadDirs = newDirs;
             };
 
-            // D-Pad Touch Listeners
             if (dpadCross) {
                 dpadCross.addEventListener('touchstart', (e) => {
                     e.preventDefault();
@@ -1482,10 +1535,9 @@
                 window.addEventListener('touchend', endDpadTouch, { passive: false });
                 window.addEventListener('touchcancel', endDpadTouch, { passive: false });
 
-                // Desktop Pointer Drag Fallback for D-Pad
                 let pointerActive = false;
                 dpadCross.addEventListener('pointerdown', (e) => {
-                    if (e.pointerType === 'touch') return; // Handled by TouchEvent
+                    if (e.pointerType === 'touch') return;
                     e.preventDefault();
                     pointerActive = true;
                     dpadCross.setPointerCapture(e.pointerId);
@@ -1500,7 +1552,7 @@
                     }
                 });
 
-                const clearPointerDpad = (e) => {
+                const clearPointerDpad = () => {
                     if (pointerActive) {
                         pointerActive = false;
                         applyDpadDirections(new Set());
@@ -1511,53 +1563,84 @@
                 dpadCross.addEventListener('pointercancel', clearPointerDpad);
             }
 
-            // Action & Pill Buttons Touch Listeners (A, B, Select, Start)
-            // Each button tracks active touch identifiers so multiple buttons can be held at once!
-            const touchButtons = document.querySelectorAll('[data-gb-btn]:not(.dpad-btn)');
-            touchButtons.forEach(el => {
-                const btn = el.getAttribute('data-gb-btn');
-                const activeBtnTouchIds = new Set();
+            const isActionButton = (target) => {
+                const el = target instanceof Element
+                    ? target.closest('[data-gb-btn]:not(.dpad-btn)')
+                    : null;
+                return el || null;
+            };
 
-                el.addEventListener('touchstart', (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (audio?.ctx?.state === 'suspended') audio.ctx.resume();
+            if (IS_COARSE_POINTER) {
+                // Mobile: Touch events with identifier tracking (no DOM modification, no layout trashing)
+                document.addEventListener('touchstart', (e) => {
+                    let handled = false;
                     for (let i = 0; i < e.changedTouches.length; i++) {
-                        activeBtnTouchIds.add(e.changedTouches[i].identifier);
+                        const t = e.changedTouches[i];
+                        const el = isActionButton(t.target);
+                        if (!el) continue;
+                        const btn = el.getAttribute('data-gb-btn');
+                        if (!btn) continue;
+                        handled = true;
+                        actionTouchIds.set(t.identifier, btn);
+                        actionBtnTouchCounts[btn] = (actionBtnTouchCounts[btn] || 0) + 1;
+                        if (actionBtnTouchCounts[btn] === 1) setButtonState(btn, true);
                     }
+                    if (handled) {
+                        e.preventDefault();
+                        if (audio?.ctx?.state === 'suspended') audio.ctx.resume();
+                    }
+                }, { passive: false });
+
+                const endActionTouch = (e) => {
+                    for (let i = 0; i < e.changedTouches.length; i++) {
+                        const t = e.changedTouches[i];
+                        const btn = actionTouchIds.get(t.identifier);
+                        if (!btn) continue;
+                        actionTouchIds.delete(t.identifier);
+                        const count = (actionBtnTouchCounts[btn] || 1) - 1;
+                        actionBtnTouchCounts[btn] = count;
+                        if (count <= 0) {
+                            actionBtnTouchCounts[btn] = 0;
+                            setButtonState(btn, false);
+                        }
+                    }
+                };
+                document.addEventListener('touchend', endActionTouch, { passive: true });
+                document.addEventListener('touchcancel', endActionTouch, { passive: true });
+            } else {
+                // Desktop: Pointer events with visual pressed state
+                document.addEventListener('pointerdown', (e) => {
+                    if (e.pointerType === 'touch') return;
+                    const el = isActionButton(e.target);
+                    if (!el) return;
+                    e.preventDefault();
+                    const btn = el.getAttribute('data-gb-btn');
+                    if (!btn) return;
+                    if (!actionPointerIds.has(btn)) actionPointerIds.set(btn, new Set());
+                    actionPointerIds.get(btn).add(e.pointerId);
+                    actionPointerToButton.set(e.pointerId, btn);
+                    try { el.setPointerCapture(e.pointerId); } catch (_) {}
                     setButtonState(btn, true);
                 }, { passive: false });
 
-                const handleEnd = (e) => {
-                    for (let i = 0; i < e.changedTouches.length; i++) {
-                        activeBtnTouchIds.delete(e.changedTouches[i].identifier);
-                    }
-                    if (activeBtnTouchIds.size === 0) {
-                        setButtonState(btn, false);
+                const releaseActionPointer = (e) => {
+                    const btn = actionPointerToButton.get(e.pointerId);
+                    if (!btn) return;
+                    actionPointerToButton.delete(e.pointerId);
+                    const ids = actionPointerIds.get(btn);
+                    if (ids) {
+                        ids.delete(e.pointerId);
+                        if (ids.size === 0) {
+                            actionPointerIds.delete(btn);
+                            setButtonState(btn, false);
+                        }
                     }
                 };
+                document.addEventListener('pointerup', releaseActionPointer, { passive: true });
+                document.addEventListener('pointercancel', releaseActionPointer, { passive: true });
+            }
 
-                el.addEventListener('touchend', handleEnd, { passive: false });
-                el.addEventListener('touchcancel', handleEnd, { passive: false });
-
-                // Desktop Mouse fallback
-                el.addEventListener('mousedown', (e) => {
-                    e.preventDefault();
-                    setButtonState(btn, true);
-                    if (audio?.ctx?.state === 'suspended') audio.ctx.resume();
-                });
-                el.addEventListener('mouseup', (e) => {
-                    e.preventDefault();
-                    setButtonState(btn, false);
-                });
-                el.addEventListener('mouseleave', (e) => {
-                    setButtonState(btn, false);
-                });
-            });
-
-            // ========================================================
-            // KEYBOARD CONTROLS (DESKTOP)
-            // ========================================================
+            // Keyboard Controls (Desktop)
             const keyMap = {
                 'ArrowUp': 'up', 'KeyW': 'up',
                 'ArrowDown': 'down', 'KeyS': 'down',
@@ -1589,13 +1672,10 @@
                 }
             });
 
-            // Reset buttons when window loses focus (e.g. Alt-Tab, screenshot tool)
             window.addEventListener('blur', resetAllButtons);
             window.addEventListener('focus', resetAllButtons);
 
-            // ========================================================
-            // MOBILE NAVIGATION TABS (GAME, FILES, CHAT, LOGS)
-            // ========================================================
+            // Mobile Navigation Tabs
             document.querySelectorAll('.mobile-tab-btn').forEach(btn => {
                 btn.onclick = () => {
                     const tab = btn.getAttribute('data-tab');
@@ -1623,16 +1703,11 @@
                             if (filesCol) filesCol.style.display = 'none';
                             if (chatCol) chatCol.style.display = 'flex';
                             chatCol?.scrollIntoView({ behavior: 'smooth' });
-                        } else if (tab === 'logs') {
-                            if (filesCol) filesCol.style.display = 'flex';
-                            if (chatCol) chatCol.style.display = 'none';
-                            $('system-logs')?.scrollIntoView({ behavior: 'smooth' });
                         }
                     }
                 };
             });
 
-            // Responsive Window Resize Handler
             window.addEventListener('resize', () => {
                 const filesCol = $('panel-files-col');
                 const chatCol = $('panel-chat-col');
@@ -1644,7 +1719,7 @@
                     if (activeTab === 'game') {
                         if (filesCol) filesCol.style.display = 'none';
                         if (chatCol) chatCol.style.display = 'none';
-                    } else if (activeTab === 'files' || activeTab === 'logs') {
+                    } else if (activeTab === 'files') {
                         if (filesCol) filesCol.style.display = 'flex';
                         if (chatCol) chatCol.style.display = 'none';
                     } else if (activeTab === 'chat') {
@@ -1654,7 +1729,6 @@
                 }
             });
 
-            // Initial mobile layout setup: hide side panels on phone so gamepad is primary
             if (window.innerWidth < 1024) {
                 const filesCol = $('panel-files-col');
                 const chatCol = $('panel-chat-col');
@@ -1662,7 +1736,6 @@
                 if (chatCol) chatCol.style.display = 'none';
             }
 
-            // Room code copy button
             const btnCopy = $('btn-copy-code');
             if (btnCopy) {
                 btnCopy.onclick = async () => {
@@ -1678,23 +1751,27 @@
                 };
             }
 
-            // Audio Toggle / Resume button
+            // Audio Mute / Resume button
             const btnAudio = $('btn-audio-toggle');
             if (btnAudio) {
                 btnAudio.onclick = () => {
                     if (!audio?.ctx) return;
                     if (audio.ctx.state === 'suspended') {
-                        audio.ctx.resume();
-                        $('audio-icon').innerText = '🔊';
-                    } else if (audio.ctx.state === 'running') {
-                        $('audio-icon').innerText = '🔊';
+                        audio.ctx.resume().then(() => {
+                            audio.setMuted(false);
+                        }).catch(() => {});
+                        return;
                     }
+                    audio.toggleMute();
                 };
             }
+
+            fitCanvasIntegerScale();
+            window.addEventListener('resize', fitCanvasIntegerScale);
         }
 
         // ============================================================
-        // MAIN EMULATION LOOP & BACKGROUND HEARTBEAT
+        // MAIN EMULATION LOOP & BACKGROUND WATCHDOG
         // ============================================================
         let lastTickTime = performance.now();
         let lastPlayTimeTick = 0;
@@ -1703,7 +1780,6 @@
             const wram = getWram();
             if (!wram) return;
 
-            // Keep ROM's timer enable flag active ($CAC4)
             wram[OFFSET_PLAY_TIME_ENABLE] = 1;
 
             const now = performance.now();
@@ -1735,6 +1811,8 @@
         function stepEmulator() {
             if (!module || !emulatorPtr) return;
 
+            flushJoypadStates();
+
             const runUntil = getExport('emulator_run_until_f64');
             const getTicks = getExport('emulator_get_ticks_f64');
             const target = getTicks(emulatorPtr) + 70224;
@@ -1764,21 +1842,21 @@
 
             lastTickTime = performance.now();
             animationFrameReq = requestAnimationFrame(tick);
-            updateDebugOverlay();
         }
 
-        // Background watchdog: If requestAnimationFrame pauses (e.g. taking screenshot,
-        // tab switched, or reader mode active), keep stepping the CPU and network queues!
         setInterval(() => {
-            if (emulatorPtr && performance.now() - lastTickTime > 60) {
+            if (emulatorPtr && performance.now() - lastTickTime > 80) {
                 stepEmulator();
                 lastTickTime = performance.now();
             }
-        }, 16);
+        }, 33);
 
         // ============================================================
         // MULTI-STAGE LOCKSTEP & RAM LOGIC
         // ============================================================
+        let lastP1Visual = null;
+        let lastP2Visual = null;
+
         function syncRamLogic() {
             const wram = getWram();
             if (!wram) return;
@@ -1786,15 +1864,20 @@
             const p1 = wram[OFFSET_P1_READY];
             const p2 = wram[OFFSET_P2_READY];
 
-            $('p1-val').innerText = p1;
-            $('p2-val').innerText = p2;
-            $('p1-flag').className = `w-3 h-3 rounded-full ${p1 > 0 ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-slate-700'}`;
-            $('p2-flag').className = `w-3 h-3 rounded-full ${p2 > 0 ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-slate-700'}`;
+            // Only update DOM styles when the status actually changes (zero per-frame style recalculations)
+            if (p1 !== lastP1Visual) {
+                lastP1Visual = p1;
+                const p1Flag = $('p1-flag');
+                if (p1Flag) p1Flag.className = `w-3 h-3 rounded-full ${p1 > 0 ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-slate-700'}`;
+            }
+            if (p2 !== lastP2Visual) {
+                lastP2Visual = p2;
+                const p2Flag = $('p2-flag');
+                if (p2Flag) p2Flag.className = `w-3 h-3 rounded-full ${p2 > 0 ? 'bg-green-500 shadow-[0_0_8px_#22c55e]' : 'bg-slate-700'}`;
+            }
 
-            // P1_READY changed: broadcast the new step to the opponent
             if (p1 !== lastP1State) {
                 lastP1State = p1;
-                log(`[LOCKSTEP] Local P1_READY advanced to State ${p1}`);
 
                 if (connection?.open) {
                     const avatar = wram[OFFSET_PLAYER_AVATAR];
@@ -1809,7 +1892,6 @@
                 }
             }
 
-            // State 1: Both in room -> automatically exchange decks and names
             if (p1 >= 1 && p2 >= 1 && !deckSynced && connection?.open) {
                 deckSynced = true;
 
@@ -1821,10 +1903,7 @@
 
                 if (isHost) {
                     wram[OFFSET_SERIAL_OP] = (coinFlip === 0 ? 0x29 : 0x00);
-                    log(`Host initialized wSerialOp = 0x${wram[OFFSET_SERIAL_OP].toString(16)} (Coin flip: ${coinFlip})`);
                 }
-
-                log("Both players ready! Auto-syncing name, avatar, and deck to opponent...");
 
                 connection.send({
                     type: 'deck_exchange',
@@ -1835,12 +1914,8 @@
                 });
             }
 
-            // Board Setup Complete: exchange full wPlayerDuelVariables ($C200 - $C2FF, 256 bytes)
-            // Triggers when local player reaches board setup complete (State 2 in current asm or State 3 in updated asm)
             if (p1 >= 2 && !boardSetupSynced && connection?.open) {
                 boardSetupSynced = true;
-                log("Local player completed board setup! Sending initial duel variables to opponent...");
-
                 const myDuelvars = Array.from(wram.subarray(OFFSET_PLAYER_DUELVARS, OFFSET_PLAYER_DUELVARS + 0x0100));
 
                 connection.send({
@@ -1871,8 +1946,6 @@
                     type: 'serial_packet',
                     payload: packet
                 });
-
-                log(`[SERIAL] Packet sent (${packet.length} bytes): [${packet.join(', ')}]`);
             }
         }
 
@@ -1883,11 +1956,8 @@
             const wram = getWram();
             if (!wram) return;
 
-            $('fifo-depth').innerText = `${incomingSerialQueue.length} pkts`;
-
             if (incomingSerialQueue.length === 0) return;
 
-            // Only feed into WRAM when the previous packet has been fully consumed by the ROM!
             const recvCount = wram[OFFSET_SERIAL_RECV_COUNT];
             const recvState = wram[OFFSET_SERIAL_RECV_STATE];
 
@@ -1897,8 +1967,6 @@
 
                 wram.set(bytes, OFFSET_SERIAL_RECV_BUF);
                 wram[OFFSET_SERIAL_RECV_COUNT] = bytes.length;
-
-                log(`[FIFO] Injected packet (${bytes.length} bytes) into WRAM. Remaining in queue: ${incomingSerialQueue.length}`);
             }
         }
 
@@ -1913,7 +1981,6 @@
             if (state === PACKET_CONSUMED) {
                 connection.send({ type: 'packet_received_by_opp' });
                 wram[OFFSET_SERIAL_RECV_STATE] = PACKET_IDLE;
-                log('[SERIAL] Packet consumed by ROM. Sent PACKET_RECEIVED_BY_OPP acknowledgment.');
             }
         }
 
@@ -2007,7 +2074,6 @@
             return copy;
         }
 
-        // Auto-save SRAM periodically every 5 seconds if running
         setInterval(async () => {
             if (emulatorPtr) {
                 const sram = getEmulatorSramData();
@@ -2017,7 +2083,6 @@
             }
         }, 5000);
 
-        // Also persist before closing/reloading window
         window.addEventListener('beforeunload', () => {
             if (emulatorPtr) {
                 const sram = getEmulatorSramData();
@@ -2058,7 +2123,6 @@
                             $('rom-status').innerHTML = `<span class="text-emerald-400 font-bold">Auto: ${cleanName} (${sizeKb}KB)</span>`;
                             const sub = $('screen-start-subtext');
                             if (sub) sub.innerText = `ROM Ready: ${cleanName} (${sizeKb}KB)`;
-                            log(`Auto-detected ROM: ${cleanName} (${sizeKb} KB)`);
                             return;
                         }
                     }
@@ -2072,7 +2136,6 @@
             const saved = await loadSramFromStorage();
             if (saved && saved.length > 0) {
                 $('sav-status').innerHTML = `<span class="text-emerald-400 font-bold">Browser: ${saved.length}B</span>`;
-                log(`[SRAM] Browser save found (${saved.length} bytes). Will auto-load on start.`);
             } else {
                 $('sav-status').innerHTML = `<span class="text-slate-400">Browser: Empty</span>`;
             }
@@ -2087,18 +2150,14 @@
 
             if (romFile) {
                 romBuf = await romFile.arrayBuffer();
-                log(`Loaded local ROM file: ${romFile.name}`);
             } else if (autoFetchedRom) {
                 romBuf = autoFetchedRom;
-                log("Using auto-fetched server ROM.");
             } else {
                 $('rom-status').innerHTML = `<span class="text-yellow-400">Fetching ROM...</span>`;
                 await autoDetectRom();
                 if (autoFetchedRom) {
                     romBuf = autoFetchedRom;
-                    log("Using auto-fetched server ROM.");
                 } else {
-                    log("No ROM selected or found on server.");
                     alert("Please select a Pokémon TCG ROM (.gbc) or place poketcg-duel-client.gbc in the same folder as index.html.");
                     return;
                 }
@@ -2111,12 +2170,10 @@
                 savBuf = await savFile.arrayBuffer();
                 await saveSramToStorage(new Uint8Array(savBuf));
                 $('sav-status').innerHTML = `<span class="text-emerald-400 font-bold">Browser: ${savBuf.byteLength}B</span>`;
-                log(`Imported .sav file into browser storage (${savBuf.byteLength} bytes).`);
             } else {
                 const storedSram = await loadSramFromStorage();
                 if (storedSram && storedSram.length > 0) {
                     savBuf = storedSram.buffer;
-                    log(`Loaded save from browser storage (${storedSram.length} bytes).`);
                 }
             }
 
@@ -2128,7 +2185,6 @@
         if (btnResetGame) {
             btnResetGame.onclick = async () => {
                 if (!emulatorPtr || !currentRomBuffer) return;
-                log("Resetting console...");
                 const sram = getEmulatorSramData();
                 if (sram && sram.length > 0) {
                     await saveSramToStorage(sram);
@@ -2138,7 +2194,6 @@
                 await initEmulator(currentRomBuffer, savBuf);
                 resetAllButtons();
                 $('gb-canvas')?.focus();
-                log("Game reset successfully.");
             };
         }
 
@@ -2147,7 +2202,6 @@
             const sram = getEmulatorSramData();
             if (sram && sram.length > 0) {
                 await saveSramToStorage(sram);
-                log("[SRAM] Saved to browser storage.");
                 const oldText = $('btn-save-now').innerText;
                 $('btn-save-now').innerText = "✓ SAVED!";
                 setTimeout(() => { $('btn-save-now').innerText = oldText; }, 1500);
@@ -2163,7 +2217,6 @@
                 a.href = URL.createObjectURL(blob);
                 a.download = 'poketcg.sav';
                 a.click();
-                log("Exported current save as poketcg.sav");
             }
         };
 
@@ -2171,11 +2224,9 @@
             if (confirm("Reset/Delete browser save data? You will start fresh on next launch.")) {
                 await clearSramFromStorage();
                 $('sav-status').innerHTML = `<span class="text-slate-400">Browser: Empty</span>`;
-                log("[SRAM] Browser save cleared.");
             }
         };
 
-        // Initialize status checks on load
         autoDetectRom();
         initStorageStatus();
 
@@ -2204,7 +2255,7 @@
             port: 443,
             path: PEERJS_PATH,
             secure: true,
-            debug: 3,
+            debug: 0,
             config: {
                 iceTransportPolicy: 'all',
                 iceServers: [
@@ -2235,62 +2286,23 @@
             }
         };
 
-        function updateDebugOverlay() {
-            // Remove / hide debug overlay in phone mode (< 1024px)
-            if (window.innerWidth < 1024) {
-                const el = $('debug-overlay');
-                if (el) el.remove();
-                return;
-            }
-
-            const wram = getWram();
-            if (!wram) return;
-
-            let debugEl = $('debug-overlay');
-            if (!debugEl) {
-                debugEl = document.createElement('div');
-                debugEl.id = 'debug-overlay';
-                debugEl.className = 'fixed bottom-4 right-4 bg-black/80 text-green-400 font-mono text-[10px] p-3 rounded border border-slate-700 pointer-events-none z-50 space-y-1';
-                document.body.appendChild(debugEl);
-            }
-
-            const whoseTurn = wram[OFFSET_WHOSE_TURN];
-            const whoseTurnStr = whoseTurn === 0xC2 ? 'PLAYER' : (whoseTurn === 0xC3 ? 'OPPONENT' : '0x' + whoseTurn.toString(16));
-            debugEl.innerHTML = `
-                <div>wSerialOp  : 0x${wram[OFFSET_SERIAL_OP].toString(16).padStart(2, '0')}</div>
-                <div>wWhoseTurn : 0x${whoseTurn.toString(16).padStart(2, '0')} (${whoseTurnStr})</div>
-                <div>RNG        : [${wram[OFFSET_RNG]}, ${wram[OFFSET_RNG + 1]}, ${wram[OFFSET_RNG + 2]}]</div>
-                <div>P1_READY   : ${wram[OFFSET_P1_READY]}</div>
-                <div>P2_READY   : ${wram[OFFSET_P2_READY]}</div>
-                <div>SEND_QUEUE : ${wram[OFFSET_SERIAL_SEND_TOGGLE]} bytes</div>
-                <div>RECV_QUEUE : ${wram[OFFSET_SERIAL_RECV_COUNT]} bytes</div>
-                <div>FIFO_DEPTH : ${incomingSerialQueue.length} pkts</div>
-                <div>SEND_STATE : ${wram[OFFSET_SERIAL_SEND_STATE]}</div>
-                <div>RECV_STATE : ${wram[OFFSET_SERIAL_RECV_STATE]}</div>
-            `;
-        }
-
         function createHost() {
-            if (peer) { log('Already have a PeerJS session.'); return; }
+            if (peer) return;
             myRoomCode = makeRoomCode();
             $('room-code').innerText = myRoomCode;
             setConnectionStatus('CREATING ROOM');
-            log(`Creating room ${myRoomCode} on ${PEERJS_SERVER}...`);
 
             peer = new Peer(myRoomCode, peerOptions);
 
-            peer.on('open', id => {
+            peer.on('open', () => {
                 setConnectionStatus('WAITING FOR PLAYER');
-                log(`Room ready. Share this code: ${id}`);
             });
 
             peer.on('connection', c => {
-                log('Player joined room.');
                 setupConnection(c);
             });
 
-            peer.on('error', err => {
-                log(`PeerJS Notice: ${err.type || err.message || 'unknown'}`);
+            peer.on('error', () => {
                 if (!connection || !connection.open) {
                     setConnectionStatus('LOBBY ERROR', 'text-red-500 font-bold uppercase');
                 }
@@ -2301,16 +2313,12 @@
 
         function joinRoom() {
             const code = $('remote-id').value.trim().toUpperCase();
-            if (!/^[A-Z2-9]{6}$/.test(code)) {
-                log('Enter a valid 6-character room code.');
-                return;
-            }
-            if (peer) { log('Already have a PeerJS session.'); return; }
+            if (!/^[A-Z2-9]{6}$/.test(code)) return;
+            if (peer) return;
 
             myRoomCode = code;
             $('room-code').innerText = code;
             setConnectionStatus('CONNECTING');
-            log(`Connecting to room ${code} on ${PEERJS_SERVER}...`);
 
             peer = new Peer(peerOptions);
 
@@ -2319,8 +2327,7 @@
                 setupConnection(c);
             });
 
-            peer.on('error', err => {
-                log(`PeerJS Notice: ${err.type || err.message || 'unknown'}`);
+            peer.on('error', () => {
                 if (!connection || !connection.open) {
                     setConnectionStatus('LOBBY ERROR', 'text-red-500 font-bold uppercase');
                 }
@@ -2338,11 +2345,9 @@
         function setupConnection(conn) {
             connection = conn;
             setConnectionStatus('CONNECTING');
-            log(`Peer connection created with ${conn.peer}. Waiting for WebRTC...`);
 
             conn.on('open', () => {
                 setConnectionStatus('LINKED', 'text-green-500 font-bold uppercase');
-                log('WebRTC data connection OPEN.');
                 addChatMessage('SYSTEM', 'Peer connection established.');
 
                 const myName = getLocalPlayerName();
@@ -2359,7 +2364,6 @@
             conn.on('data', d => {
                 if (!d?.type) return;
 
-                // 1. HELLO / PLAYER INFO
                 if (d.type === 'hello' || d.type === 'player_info') {
                     if (d.rawName && Array.isArray(d.rawName)) {
                         writeOpponentNameBytes(d.rawName);
@@ -2367,23 +2371,19 @@
                     if (d.name) {
                         remotePlayerName = d.name;
                         $('opp-name-tag').innerText = d.name;
-                        log(`Partner connected as: ${remotePlayerName}`);
                     }
                     return;
                 }
 
-                // 2. CHAT
                 if (d.type === 'chat') {
                     addChatMessage(d.name || remotePlayerName || "PARTNER", d.msg);
                     return;
                 }
 
-                // 3. READY SYNC (Multi-step lockstep barrier)
                 if (d.type === 'ready_sync' || d.type === 'p1_ready_sync') {
                     const stepVal = d.step ?? d.ready;
                     const wram = getWram();
                     if (wram && stepVal !== undefined) {
-                        // Advance opponent's ready value
                         wram[OFFSET_P2_READY] = stepVal;
 
                         if (d.avatar !== undefined) {
@@ -2392,12 +2392,10 @@
                         if (d.name && Array.isArray(d.name)) {
                             writeOpponentNameBytes(d.name);
                         }
-                        log(`[LOCKSTEP] Remote ready advanced to State ${stepVal}`);
                     }
                     return;
                 }
 
-                // 4. DECK & NAME EXCHANGE
                 if (d.type === 'deck_exchange') {
                     const wram = getWram();
                     if (wram) {
@@ -2414,49 +2412,36 @@
                         if (!isHost && d.firstPlayer !== null && d.firstPlayer !== undefined) {
                             const joinerGoesFirst = (d.firstPlayer === 1);
                             wram[OFFSET_SERIAL_OP] = joinerGoesFirst ? 0x29 : 0x00;
-                            const starterText = joinerGoesFirst ? "YOU GO FIRST!" : "OPPONENT GOES FIRST!";
-                            log(`Coin flip result: ${starterText} (wSerialOp = 0x${wram[OFFSET_SERIAL_OP].toString(16)})`);
                             addChatMessage('SYSTEM', 'Match starting!');
                         } else if (isHost) {
-                            const hostGoesFirst = (wram[OFFSET_SERIAL_OP] === 0x29);
-                            const starterText = hostGoesFirst ? "YOU GO FIRST!" : "OPPONENT GOES FIRST!";
-                            log(`Coin flip result: ${starterText} (wSerialOp = 0x${wram[OFFSET_SERIAL_OP].toString(16)})`);
                             addChatMessage('SYSTEM', 'Match starting!');
                         }
                     }
                     return;
                 }
 
-                // 5. BOARD SETUP SYNC: Inject opponent's initial duelvars into $C300-$C3FF
                 if (d.type === 'board_setup_sync') {
                     const wram = getWram();
                     if (wram && d.duelvars && Array.isArray(d.duelvars)) {
                         const oppDuelvars = new Uint8Array(d.duelvars);
                         wram.set(oppDuelvars, OFFSET_OPPONENT_DUELVARS);
-                        // Force duelist type to DUELIST_TYPE_LINK_OPP (0x01)
                         wram[OFFSET_OPPONENT_DUELVARS + 0xF1] = 0x01;
-
-                        log(`[LOCKSTEP] Injected opponent board setup (${oppDuelvars.length} bytes into $C300).`);
                         addChatMessage('SYSTEM', 'Opponent completed board setup.');
                     }
                     return;
                 }
 
-                // 6. PACKET ACK (Peer consumed a packet we sent)
                 if (d.type === 'packet_received_by_opp') {
                     const wram = getWram();
                     if (wram) {
                         wram[OFFSET_SERIAL_SEND_STATE] = PACKET_RECEIVED_BY_OPP;
-                        log('[SERIAL] Opponent acknowledged packet. wSerialSendState = PACKET_RECEIVED_BY_OPP.');
                     }
                     return;
                 }
 
-                // 7. SERIAL PACKET (Push to incoming FIFO queue)
                 if (d.type === 'serial_packet') {
                     if (d.payload && Array.isArray(d.payload)) {
                         incomingSerialQueue.push(d.payload);
-                        log(`[FIFO] Received packet (${d.payload.length} bytes). Queue depth: ${incomingSerialQueue.length}`);
                     }
                     return;
                 }
@@ -2465,12 +2450,10 @@
             conn.on('close', () => {
                 if (connection === conn) connection = null;
                 setConnectionStatus('PARTNER DISCONNECTED', 'text-orange-400 font-bold uppercase');
-                log('P2P connection closed.');
                 addChatMessage('SYSTEM', 'Peer connection closed.');
             });
 
-            conn.on('error', err => {
-                log(`DataConnection ERROR: ${err.type || 'unknown'}`);
+            conn.on('error', () => {
                 setConnectionStatus('CONNECTION ERROR', 'text-red-500 font-bold uppercase');
             });
         }
@@ -2509,24 +2492,27 @@
         };
 
         $('focus-overlay').onclick = () => {
-            audio?.ctx.resume();
+            if (audio?.ctx) {
+                audio.ctx.resume();
+                audio.setMuted(false);
+            }
             $('gb-canvas').focus();
             $('focus-overlay').classList.add('hidden');
         };
 
         $('gb-canvas').onclick = () => {
             $('gb-canvas').focus();
+            if (audio?.ctx?.state === 'suspended') {
+                audio.ctx.resume();
+            }
         };
 
-        // Ensure input listeners and integer scaling are active immediately
         window.addEventListener('DOMContentLoaded', () => {
             setupInput();
             fitCanvasIntegerScale();
         });
         setupInput();
         fitCanvasIntegerScale();
-        window.addEventListener('resize', fitCanvasIntegerScale);
     </script>
 </body>
 </html>
-
