@@ -51,7 +51,7 @@
             background: var(--gb-shell-bg);
             border: 2px solid #333c52;
             border-top: 3px solid #45506d;
-            border-radius: 36px 36px 44px 44px;
+            border-radius: 22px 22px 38px 38px;
             box-shadow: 
                 0 25px 50px -12px rgba(0, 0, 0, 0.85),
                 0 4px 12px rgba(0, 0, 0, 0.5),
@@ -63,7 +63,7 @@
             max-width: 100%;
             margin-left: auto;
             margin-right: auto;
-            padding: 0.75rem;
+            padding: 8px 6px 14px 6px;
         }
 
         /* Subtle curved grip indent on Game Boy sides */
@@ -96,7 +96,7 @@
             background: var(--gb-bezel-bg);
             border: 2px solid var(--gb-bezel-border);
             border-bottom: 3px solid #1a1e2b;
-            border-radius: 14px;
+            border-radius: 14px 14px 18px 18px;
             box-shadow: 
                 inset 0 2px 6px rgba(0, 0, 0, 0.95),
                 0 1px 1px rgba(255, 255, 255, 0.08);
@@ -162,15 +162,17 @@
 
         @media (max-width: 1023px) {
             #gb-chassis {
-                padding: 3px 2px !important;
+                padding: 6px 5px !important;
+                border-radius: 18px 18px 30px 30px !important;
                 width: fit-content;
                 max-width: 100%;
                 margin: 0 auto;
                 box-sizing: border-box;
             }
             .gb-screen-bezel {
-                padding: 2px !important;
+                padding: 3px !important;
                 border: 1.5px solid var(--gb-bezel-border) !important;
+                border-radius: 12px 12px 16px 16px !important;
                 width: fit-content;
                 max-width: 100%;
                 margin: 0 auto;
@@ -694,7 +696,7 @@
                 <div class="gb-screen-bezel relative flex flex-col items-center">
                     
                     <!-- Top bezel accents: Power LED & Stereo indicator -->
-                    <div class="w-full flex items-center justify-between text-[10px] text-zinc-500 font-sans font-bold px-1 mb-2">
+                    <div class="w-full flex items-center justify-between text-[10px] text-zinc-500 font-sans font-bold px-2 pt-0.5 mb-1.5">
                         <div class="flex items-center gap-2">
                             <div class="power-led-ring">
                                 <span id="power-led" class="w-2.5 h-2.5 rounded-full bg-rose-900 border border-zinc-700 shadow-none transition-all"></span>
@@ -1078,29 +1080,6 @@
         // INTEGER PIXEL SCALE (HARDWARE-ACCELERATED & ZERO CLIPPING)
         // ============================================================
         let _lastScaleKey = '';
-        let _frameSrcCanvas = null;
-        let _frameSrcCtx = null;
-        let _displayCtx = null;
-        let _displayCanvas = null;
-
-        function getFrameSrc() {
-            if (!_frameSrcCanvas) {
-                _frameSrcCanvas = document.createElement('canvas');
-                _frameSrcCanvas.width = 160;
-                _frameSrcCanvas.height = 144;
-                _frameSrcCtx = _frameSrcCanvas.getContext('2d', { alpha: false });
-            }
-            return { canvas: _frameSrcCanvas, ctx: _frameSrcCtx };
-        }
-
-        function disableSmoothing(ctx) {
-            if (!ctx) return;
-            ctx.imageSmoothingEnabled = false;
-            ctx.mozImageSmoothingEnabled = false;
-            ctx.webkitImageSmoothingEnabled = false;
-            ctx.msImageSmoothingEnabled = false;
-        }
-
         let _lastDeviceScale = 0;
         let _frameSrcCanvas = null;
         let _frameSrcCtx = null;
@@ -1145,14 +1124,15 @@
                 availCssW = Math.max(160, colW - 8);
             }
 
-            // Target exact integer device pixels per GB pixel, maximized by available horizontal width
-            const availDevW = availCssW * dpr;
-            const deviceScale = Math.max(1, Math.floor(availDevW / 160));
+            // Maximize CSS integer scale directly from available horizontal width
+            const cssScale = Math.max(1, Math.floor(availCssW / 160));
+            const cssW = 160 * cssScale;
+            const cssH = 144 * cssScale;
 
+            // Integer device pixels per GB pixel for crisp rendering
+            const deviceScale = Math.max(1, Math.round(cssScale * dpr));
             const bufW = 160 * deviceScale;
             const bufH = 144 * deviceScale;
-            const cssW = bufW / dpr;
-            const cssH = bufH / dpr;
 
             if (deviceScale === _lastDeviceScale &&
                 canvas.width === bufW &&
