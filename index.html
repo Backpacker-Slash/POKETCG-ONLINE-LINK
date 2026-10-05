@@ -1102,13 +1102,18 @@
         // Your log: dpr=1.1 (Windows 110% display scaling).
         // ×3 CSS × 1.1 = 475.2 device px height → uneven 2px/3px rows.
         //
-        // Fix: pick an integer number of *device* pixels per GB pixel.
-        // Canvas buffer = 160×S by 144×S. CSS size = buffer/dpr.
-        // Browser then maps the buffer 1:1 onto the physical screen.
-        let _lastDeviceScale = 0;
+        // Scaling strategy:
+        //  • Mobile: keep a 160×144 buffer and let CSS (image-rendering:pixelated)
+        //    upscale. Avoids a huge drawImage every frame (was the main phone lag).
+        //  • Desktop (esp. fractional DPR like 1.1): integer *device* pixels so
+        //    rows stay uniform; upscale once via nearest-neighbor into the buffer.
+        let _lastScaleKey = '';
+        let _useCssUpscale = true; // true = buffer is 160×144; false = device buffer
         let _frameSrcCanvas = null;
         let _frameSrcCtx = null;
         let _displayCtx = null;
+        let _displayCanvas = null;
+        let _cachedImageData = null;
 
         function getFrameSrc() {
             if (!_frameSrcCanvas) {
@@ -1136,14 +1141,12 @@
             const dpr = window.devicePixelRatio || 1;
             const vw = document.documentElement.clientWidth || window.innerWidth || 360;
             const vh = window.innerHeight || 640;
-            const isMobile = vw < 1024;
+            const isMobile = vw < 1024 ||
+                !!(window.matchMedia && window.matchMedia('(pointer: coarse)').matches);
 
             let availCssW, availCssH;
             if (isMobile) {
-                // Leave room for body gutter + chassis pad + bezel pad + outline
-                // so the chosen scale never exceeds the visible content width
-                // (otherwise max-width/overflow parents clip the right edge).
-                const sideChrome = 4 + 8 + 8 + 4; // body + chassis + bezel + outline
+                const sideChrome = 4 + 8 + 8 + 4;
                 availCssW = Math.max(160, vw - sideChrome);
                 const reservedY = 52 + 44 + 190 + 8;
                 availCssH = Math.max(144, vh - reservedY);
@@ -1155,33 +1158,41 @@
                 availCssH = Math.max(144, Math.min(vh * 0.65, availCssW * (144 / 160) + 16));
             }
 
-            // Work in device pixels so height and width both land on integers.
-            const availDevW = availCssW * dpr;
-            const availDevH = availCssH * dpr;
-            const deviceScale = Math.max(1, Math.floor(Math.min(
-                availDevW / 160,
-                availDevH / 144
-            )));
+            let bufW, bufH, cssW, cssH, useCssUpscale;
 
-            const bufW = 160 * deviceScale;
-            const bufH = 144 * deviceScale;
-            // Prefer CSS sizes that map cleanly; avoid sub-pixel layout which
-            // can clip a device pixel on the right/bottom edge.
-            const cssW = bufW / dpr;
-            const cssH = bufH / dpr;
+            if (isMobile || Math.abs(dpr - Math.round(dpr)) < 0.02) {
+                // Cheap path: 160×144 buffer + integer CSS scale (GPU nearest-neighbor).
+                const cssScale = Math.max(1, Math.floor(Math.min(availCssW / 160, availCssH / 144)));
+                bufW = 160;
+                bufH = 144;
+                cssW = 160 * cssScale;
+                cssH = 144 * cssScale;
+                useCssUpscale = true;
+            } else {
+                // Fractional DPR desktop: integer device pixels per source pixel.
+                const deviceScale = Math.max(1, Math.floor(Math.min(
+                    (availCssW * dpr) / 160,
+                    (availCssH * dpr) / 144
+                )));
+                bufW = 160 * deviceScale;
+                bufH = 144 * deviceScale;
+                cssW = bufW / dpr;
+                cssH = bufH / dpr;
+                useCssUpscale = false;
+            }
+
             const cssWStr = (Math.round(cssW * 1000) / 1000) + 'px';
             const cssHStr = (Math.round(cssH * 1000) / 1000) + 'px';
+            const scaleKey = bufW + 'x' + bufH + '@' + cssWStr;
 
-            if (deviceScale === _lastDeviceScale &&
-                canvas.width === bufW &&
-                canvas.style.width === cssWStr) {
+            if (scaleKey === _lastScaleKey && canvas.width === bufW) {
                 return;
             }
-            _lastDeviceScale = deviceScale;
+            _lastScaleKey = scaleKey;
+            _useCssUpscale = useCssUpscale;
 
             canvas.style.width = cssWStr;
             canvas.style.height = cssHStr;
-            // Wrap content box == canvas size (content-box + no border).
             wrap.style.width = cssWStr;
             wrap.style.height = cssHStr;
 
@@ -1191,6 +1202,7 @@
                 _displayCtx = null;
             }
 
+            _displayCanvas = canvas;
             if (!_displayCtx) {
                 _displayCtx = canvas.getContext('2d', { alpha: false });
             }
@@ -1198,23 +1210,33 @@
         }
 
         function blitFrame(frameData) {
-            const { canvas: src, ctx: srcCtx } = getFrameSrc();
-            let img;
-            try {
-                img = new ImageData(frameData, 160, 144);
-            } catch (_) {
-                img = new ImageData(new Uint8ClampedArray(frameData), 160, 144);
+            // Reuse ImageData wrapper when the underlying buffer is the same view.
+            let img = _cachedImageData;
+            if (!img || img.data.buffer !== frameData.buffer || img.data.byteOffset !== frameData.byteOffset) {
+                try {
+                    img = new ImageData(frameData, 160, 144);
+                } catch (_) {
+                    img = new ImageData(new Uint8ClampedArray(frameData), 160, 144);
+                }
+                _cachedImageData = img;
             }
-            srcCtx.putImageData(img, 0, 0);
 
-            const canvas = $('gb-canvas');
-            if (!canvas) return;
+            if (!_displayCanvas) _displayCanvas = $('gb-canvas');
+            if (!_displayCanvas) return;
             if (!_displayCtx) {
-                _displayCtx = canvas.getContext('2d', { alpha: false });
+                _displayCtx = _displayCanvas.getContext('2d', { alpha: false });
+                disableSmoothing(_displayCtx);
             }
-            disableSmoothing(_displayCtx);
-            // Each GB pixel → deviceScale×deviceScale identical device pixels.
-            _displayCtx.drawImage(src, 0, 0, 160, 144, 0, 0, canvas.width, canvas.height);
+
+            if (_useCssUpscale || _displayCanvas.width === 160) {
+                // Fast path: one putImageData; CSS scales the element.
+                _displayCtx.putImageData(img, 0, 0);
+            } else {
+                // Desktop fractional-DPR path: stage then nearest-neighbor upscale.
+                const { ctx: srcCtx } = getFrameSrc();
+                srcCtx.putImageData(img, 0, 0);
+                _displayCtx.drawImage(_frameSrcCanvas, 0, 0, 160, 144, 0, 0, _displayCanvas.width, _displayCanvas.height);
+            }
         }
 
         // ============================================================
@@ -1942,14 +1964,15 @@
             animationFrameReq = requestAnimationFrame(tick);
         }
 
-        // Background watchdog: If requestAnimationFrame pauses (e.g. taking screenshot,
-        // tab switched, or reader mode active), keep stepping the CPU and network queues!
+        // Background watchdog: if rAF pauses (screenshot / background tab), keep
+        // lockstep + network alive — but not at a full 60 Hz (that doubled CPU
+        // load on phones when rAF was also struggling).
         setInterval(() => {
-            if (emulatorPtr && performance.now() - lastTickTime > 60) {
+            if (emulatorPtr && performance.now() - lastTickTime > 80) {
                 stepEmulator();
                 lastTickTime = performance.now();
             }
-        }, 16);
+        }, 33);
 
         // ============================================================
         // MULTI-STAGE LOCKSTEP & RAM LOGIC
