@@ -666,8 +666,8 @@
                 </h3>
                 <div id="customize-panel" class="hidden space-y-3 font-sans">
                     <p class="text-[9px] text-slate-500 leading-relaxed">
-                        Drop a <strong class="text-slate-300">48×48 PNG</strong> with ≤4 colors (optional transparency).
-                        Encoded as RGBDS 2bpp + palette and injected into the ROM.
+                        Drop a <strong class="text-slate-300">48×48 PNG</strong> with ≤ <strong class="text-slate-300">4 colors</strong>.
+                        Your Custom Avatar will be available in the PROFILE!
                     </p>
                     <label id="avatar-drop" class="block border-2 border-dashed border-slate-700 hover:border-violet-500 rounded-xl p-4 text-center cursor-pointer transition bg-slate-950/50">
                         <input id="avatar-upload" type="file" accept="image/png,.png" class="hidden">
@@ -1817,7 +1817,7 @@
                 const n = result.extracted.opaque.length + (result.extracted.hasTransparent ? 1 : 0);
                 updateAvatarUi(portrait, `OK · ${n} colors · ${result.generated.mode}`, true);
                 customPortraitSent = false;
-                addChatMessage('SYSTEM', 'Custom avatar saved — injected on boot and shared before duel.');
+                addChatMessage('SYSTEM', 'Custom avatar saved — It is now available in the PROFILE');
             } catch (e) {
                 updateAvatarUi(customPlayerPortrait, e instanceof Error ? e.message : String(e), false);
             }
