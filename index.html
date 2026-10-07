@@ -666,8 +666,8 @@
                 </h3>
                 <div id="customize-panel" class="hidden space-y-3 font-sans">
                     <p class="text-[9px] text-slate-500 leading-relaxed">
-                        Drop a <strong class="text-slate-300">48×48 PNG</strong> with ≤ <strong class="text-slate-300">4 colors</strong>.
-                        the Custom Avatar is available in the Profile
+                        Drop a <strong class="text-slate-300">48×48 PNG</strong> with ≤4 colors (optional transparency).
+                        Encoded as RGBDS 2bpp + palette and injected into the ROM.
                     </p>
                     <label id="avatar-drop" class="block border-2 border-dashed border-slate-700 hover:border-violet-500 rounded-xl p-4 text-center cursor-pointer transition bg-slate-950/50">
                         <input id="avatar-upload" type="file" accept="image/png,.png" class="hidden">
@@ -988,8 +988,8 @@
         const ROM_PORTRAIT_BANK      = 0x2E;
         const ROM_PALETTE_CUSTOM1    = 0xB849F;  // bank 2E:$449F Palettecostum1 (player)
         const ROM_PALETTE_CUSTOM2    = 0xB84A9;  // bank 2E:$44A9 Palettecostum2 (opponent)
-        const ROM_GFX_OPPONENT       = 0xA1698//0xB98D8;  // bank 2E:$58D6 + 2 CustomOpponentGfx (576 bytes)
-        const ROM_GFX_PLAYER         = 0xA18D8//0xB9B1A;  // bank 2E:$5B18 +2 CustomPlayerGfx (576 bytes)
+        const ROM_GFX_OPPONENT       = 0xA1B18;  // bank 28:$5B18 + 2 CustomOpponentGfx (576 bytes)
+        const ROM_GFX_PLAYER         = 0xA18D8;  // bank 28:$58D6 + 2 CustomPlayerGfx (576 bytes)
         const PORTRAIT_GFX_BYTES     = 576;
         const PORTRAIT_PAL_BYTES     = 8;        // pure RGB555 payload
         const PORTRAIT_PAL_ROM_BYTES = 10;       // db 0, db 1 + 8
