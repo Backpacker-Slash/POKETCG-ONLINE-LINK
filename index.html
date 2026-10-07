@@ -883,9 +883,6 @@
                 <button type="button" class="mobile-tab-btn flex-1 py-2 text-[11px] font-bold rounded-xl text-slate-400 hover:text-white transition cursor-pointer" data-tab="chat">
                     💬 Chat & Sync
                 </button>
-                <button type="button" id="btn-mobile-open-keymap" class="mobile-tab-btn flex-1 py-2 text-[11px] font-bold rounded-xl text-sky-400 hover:text-white transition cursor-pointer">
-                    ⌨️ Keys
-                </button>
             </div>
         </div>
 
@@ -2639,7 +2636,6 @@
 
             function setupKeyMappingModal() {
                 const openBtn = $('btn-open-keymap');
-                const mobileOpenBtn = $('btn-mobile-open-keymap');
                 const modal = $('keymap-modal');
                 const closeBtn = $('btn-close-keymap');
                 const resetBtn = $('btn-reset-keymap');
@@ -2656,7 +2652,6 @@
                 };
 
                 if (openBtn) openBtn.onclick = showModal;
-                if (mobileOpenBtn) mobileOpenBtn.onclick = showModal;
                 if (closeBtn) closeBtn.onclick = hideModal;
                 if (doneBtn) doneBtn.onclick = hideModal;
 
