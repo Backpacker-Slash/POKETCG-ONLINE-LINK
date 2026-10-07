@@ -656,6 +656,36 @@
                 </div>
             </div>
 
+            <!-- Custom Avatar (48×48 PNG → RGBDS 2bpp + palette) -->
+            <div class="bg-slate-900/90 p-4 rounded-2xl border border-slate-800 shadow-lg">
+                <h3 class="text-xs font-bold text-slate-400 mb-3 uppercase tracking-wider font-mono flex items-center justify-between">
+                    <span>Custom Avatar</span>
+                    <button id="btn-customize-toggle" type="button" class="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-violet-950 text-violet-300 border border-violet-700/60 hover:bg-violet-900 cursor-pointer transition">
+                        CUSTOMIZE
+                    </button>
+                </h3>
+                <div id="customize-panel" class="hidden space-y-3 font-sans">
+                    <p class="text-[9px] text-slate-500 leading-relaxed">
+                        Drop a <strong class="text-slate-300">48×48 PNG</strong> with ≤ <strong class="text-slate-300">4 colors</strong>.
+                        the Custom Avatar is available in the Profile
+                    </p>
+                    <label id="avatar-drop" class="block border-2 border-dashed border-slate-700 hover:border-violet-500 rounded-xl p-4 text-center cursor-pointer transition bg-slate-950/50">
+                        <input id="avatar-upload" type="file" accept="image/png,.png" class="hidden">
+                        <div class="text-[11px] text-slate-300 font-semibold">Drop PNG or click</div>
+                        <div id="avatar-status" class="text-[9px] text-slate-500 mt-1 font-mono">No custom avatar</div>
+                    </label>
+                    <div class="flex items-center gap-3">
+                        <canvas id="avatar-preview" width="48" height="48" class="rounded border border-slate-700 bg-black" style="image-rendering:pixelated;width:64px;height:64px"></canvas>
+                        <div class="flex-1 space-y-1">
+                            <div id="avatar-palette" class="flex gap-1 flex-wrap"></div>
+                            <button id="btn-clear-avatar" type="button" class="w-full bg-rose-950/60 hover:bg-rose-900 text-rose-300 py-1.5 rounded-lg text-[10px] font-bold border border-rose-800/50 cursor-pointer disabled:opacity-30" disabled>
+                                CLEAR AVATAR
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Desktop Keyboard Controls Cheatsheet -->
             <div class="hidden lg:block bg-slate-900/90 p-4 rounded-2xl border border-slate-800 shadow-lg text-[11px]">
                 <h3 class="text-xs font-bold text-slate-400 mb-2 uppercase tracking-wider font-mono flex items-center justify-between">
@@ -944,6 +974,26 @@
         const PACKET_CONSUMED = 2;
         const PACKET_RECEIVED_BY_OPP = 3;
 
+        // Custom portrait avatar IDs (ROM constants)
+        const COSTUM_PIC = 0x2a;     // wPlayerPortrait when using custom player gfx
+        const LINK_OPP_PIC = 0x2b;   // wLinkOpponentAvatar when using custom opponent gfx
+
+        // Signal: wHasCustomAvatar ($CB70) — 0 = stock, 1 = custom portrait available/in use
+        // (BGB confirms label at CB70; CB31 would land inside serial/link WRAM and freeze the game)
+        const OFFSET_HAS_CUSTOM_AVATAR = 0x0B70; // $CB70
+        const OFFSET_SRAM_HAS_CUSTOM_AVATAR = 0x000B; // $A00B (SRA0)
+
+        // ROM bank $2E — BGB shows RO2E:449F etc. File offset = bank*0x4000 + (addr & 0x3FFF)
+        // Palette entries: db 0, db 1, then 4× RGB555 LE (10 bytes total)
+        const ROM_PORTRAIT_BANK      = 0x2E;
+        const ROM_PALETTE_CUSTOM1    = 0xB849F;  // bank 2E:$449F Palettecostum1 (player)
+        const ROM_PALETTE_CUSTOM2    = 0xB84A9;  // bank 2E:$44A9 Palettecostum2 (opponent)
+        const ROM_GFX_OPPONENT       = 0xA1698//0xB98D8;  // bank 2E:$58D6 + 2 CustomOpponentGfx (576 bytes)
+        const ROM_GFX_PLAYER         = 0xA18D8//0xB9B1A;  // bank 2E:$5B18 +2 CustomPlayerGfx (576 bytes)
+        const PORTRAIT_GFX_BYTES     = 576;
+        const PORTRAIT_PAL_BYTES     = 8;        // pure RGB555 payload
+        const PORTRAIT_PAL_ROM_BYTES = 10;       // db 0, db 1 + 8
+
         // ============================================================
         // GLOBAL STATE
         // ============================================================
@@ -963,7 +1013,15 @@
         let myRoomCode = null;
         let remotePlayerName = "OPPONENT";
         let currentRomBuffer = null;
+        let originalRomBuffer = null; // pristine ROM bytes — always patch from this, never from a prior patch
         let currentSavBuffer = null;
+        let liveRomPtr = null;       // wasm malloc ptr to cart ROM (patchable)
+        let liveRomSize = 0;
+
+        // Custom player portrait: { pal: Uint8Array(8), gfx: Uint8Array(576), romPal: Uint8Array(10) }
+        // Persisted in IndexedDB; re-injected on every boot. Opponent portrait is ephemeral.
+        let customPlayerPortrait = null;
+        let customPortraitSent = false; // once per link session until soft-reset
 
         // Cached opponent identity — survives soft reset (PeerJS stays open).
         // Ready is intentionally NOT cached across soft reset (duel-only).
@@ -984,6 +1042,7 @@
             lastP1Visual = null;
             lastP2Visual = null;
             incomingSerialQueue.length = 0;
+            customPortraitSent = false;
 
             const wram = getWram();
             if (wram) {
@@ -1281,6 +1340,519 @@
         }
 
         // ============================================================
+        // CUSTOM PORTRAIT CODEC (RGBDS-style 48×48 / 2bpp)
+        // ============================================================
+        const PortraitCodec = (() => {
+            const WIDTH = 48, HEIGHT = 48, TILES_X = 6, TILES_Y = 6;
+            const TILE_BYTES = 16;
+            const GFX_BYTES = TILES_X * TILES_Y * TILE_BYTES; // 576
+            const RGBDS_TRANSPARENT = 0x8000;
+            const RGBDS_UNUSED = 0xffff;
+            const ALPHA_TRANSPARENT = 0x10;
+            const ALPHA_OPAQUE = 0xf0;
+
+            function cgb555(r, g, b) {
+                return (r >> 3) | ((g >> 3) << 5) | ((b >> 3) << 10);
+            }
+            function cgbToRgb888(v) {
+                return {
+                    r: ((v & 31) * 255 + 15) / 31,
+                    g: (((v >> 5) & 31) * 255 + 15) / 31,
+                    b: (((v >> 10) & 31) * 255 + 15) / 31
+                };
+            }
+            function luminance555(v) {
+                const r = v & 31, g = (v >> 5) & 31, b = (v >> 10) & 31;
+                return 2126 * r + 7152 * g + 722 * b;
+            }
+            function grayIndex(r, hasTransparent) {
+                const gray = 255 - r;
+                const maxOpaque = hasTransparent ? 3 : 4;
+                return Math.floor(gray * maxOpaque / 256) + (hasTransparent ? 1 : 0);
+            }
+            function isGray(rgb) { return rgb.r === rgb.g && rgb.g === rgb.b; }
+            function alphaClass(a) {
+                if (a < ALPHA_TRANSPARENT) return 'transparent';
+                if (a >= ALPHA_OPAQUE) return 'opaque';
+                return 'ambiguous';
+            }
+
+            function readPngMetadata(bytes) {
+                const sig = [137, 80, 78, 71, 13, 10, 26, 10];
+                for (let i = 0; i < 8; i++) if (bytes[i] !== sig[i]) {
+                    throw new Error('Not a valid PNG (bad signature).');
+                }
+                let off = 8, ihdr = null, plte = [], trns = null;
+                while (off + 12 <= bytes.length) {
+                    const len = new DataView(bytes.buffer, bytes.byteOffset + off, 4).getUint32(0);
+                    const type = String.fromCharCode(bytes[off + 4], bytes[off + 5], bytes[off + 6], bytes[off + 7]);
+                    const start = off + 8, end = start + len;
+                    if (end + 4 > bytes.length) throw new Error('PNG chunk extends past EOF.');
+                    if (type === 'IHDR') {
+                        if (len !== 13) throw new Error('Invalid IHDR length.');
+                        const dv = new DataView(bytes.buffer, bytes.byteOffset + start, len);
+                        ihdr = {
+                            width: dv.getUint32(0), height: dv.getUint32(4),
+                            bitDepth: dv.getUint8(8), colorType: dv.getUint8(9),
+                            compression: dv.getUint8(10), filter: dv.getUint8(11), interlace: dv.getUint8(12)
+                        };
+                    } else if (type === 'PLTE') {
+                        if (len % 3 !== 0) throw new Error('Invalid PLTE length.');
+                        plte = [];
+                        for (let i = 0; i < len; i += 3) plte.push({ r: bytes[start + i], g: bytes[start + i + 1], b: bytes[start + i + 2] });
+                    } else if (type === 'tRNS') {
+                        trns = Array.from(bytes.slice(start, end));
+                    } else if (type === 'IEND') break;
+                    off = end + 4;
+                }
+                if (!ihdr) throw new Error('PNG missing IHDR.');
+                if (ihdr.compression !== 0 || ihdr.filter !== 0) throw new Error('Unsupported PNG compression/filter.');
+                return { ihdr, plte, trns, indexed: ihdr.colorType === 3 };
+            }
+
+            async function decodeImage(file) {
+                const ab = await file.arrayBuffer();
+                const bytes = new Uint8Array(ab);
+                const meta = readPngMetadata(bytes);
+                if (meta.ihdr.width !== WIDTH || meta.ihdr.height !== HEIGHT) {
+                    throw new Error(`Expected 48×48, got ${meta.ihdr.width}×${meta.ihdr.height}.`);
+                }
+                if (meta.indexed && !meta.plte.length) throw new Error('Indexed PNG missing PLTE.');
+
+                const url = URL.createObjectURL(file);
+                try {
+                    const img = new Image();
+                    img.decoding = 'async';
+                    img.src = url;
+                    await img.decode();
+                    if (img.naturalWidth !== WIDTH || img.naturalHeight !== HEIGHT) {
+                        throw new Error(`Decoded size ${img.naturalWidth}×${img.naturalHeight}, not 48×48.`);
+                    }
+                    const canvas = document.createElement('canvas');
+                    canvas.width = WIDTH; canvas.height = HEIGHT;
+                    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                    ctx.clearRect(0, 0, WIDTH, HEIGHT);
+                    ctx.drawImage(img, 0, 0);
+                    return { meta, pixels: ctx.getImageData(0, 0, WIDTH, HEIGHT).data, file };
+                } finally {
+                    URL.revokeObjectURL(url);
+                }
+            }
+
+            function extractEffectiveColors(decoded) {
+                const { pixels } = decoded;
+                const colorsByCgb = new Map();
+                let hasTransparent = false;
+                let firstAmbiguous = null;
+                for (let i = 0, p = 0; i < WIDTH * HEIGHT; i++, p += 4) {
+                    const r = pixels[p], g = pixels[p + 1], b = pixels[p + 2], a = pixels[p + 3];
+                    const ac = alphaClass(a);
+                    if (ac === 'ambiguous' && !firstAmbiguous) firstAmbiguous = { x: i % WIDTH, y: Math.floor(i / WIDTH), alpha: a };
+                    if (ac === 'transparent') { hasTransparent = true; continue; }
+                    if (ac !== 'opaque') continue;
+                    const cgb = cgb555(r, g, b);
+                    if (!colorsByCgb.has(cgb)) colorsByCgb.set(cgb, { cgb, rgb: { r, g, b } });
+                }
+                if (firstAmbiguous) {
+                    throw new Error(`Ambiguous alpha ${firstAmbiguous.alpha} at (${firstAmbiguous.x},${firstAmbiguous.y}). Use fully opaque or fully transparent.`);
+                }
+                const opaque = Array.from(colorsByCgb.values());
+                const effectiveCount = opaque.length + (hasTransparent ? 1 : 0);
+                if (effectiveCount > 4) {
+                    throw new Error(`${effectiveCount} effective colors after RGB555 reduction (max 4).`);
+                }
+                return { colorsByCgb, opaque, hasTransparent };
+            }
+
+            function detectIndexedOrder(decoded, opaqueSet) {
+                const { meta } = decoded;
+                if (!meta.indexed) return null;
+                const ordered = [];
+                const seen = new Set();
+                for (const rgb of meta.plte) {
+                    const cgb = cgb555(rgb.r, rgb.g, rgb.b);
+                    if (opaqueSet.has(cgb) && !seen.has(cgb)) {
+                        seen.add(cgb);
+                        ordered.push(cgb);
+                    }
+                }
+                for (const cgb of opaqueSet) if (!seen.has(cgb)) {
+                    throw new Error(`Indexed PLTE missing color RGB555=0x${cgb.toString(16)}.`);
+                }
+                return ordered;
+            }
+
+            function generatePalette(decoded, extracted) {
+                const { opaque, hasTransparent } = extracted;
+                const palette = new Uint16Array(4);
+                palette.fill(RGBDS_UNUSED);
+                if (hasTransparent) palette[0] = RGBDS_TRANSPARENT;
+
+                if (decoded.meta.indexed) {
+                    const ordered = detectIndexedOrder(decoded, new Set(opaque.map(x => x.cgb)));
+                    let i = hasTransparent ? 1 : 0;
+                    for (const cgb of ordered) palette[i++] = cgb;
+                    return { palette, mode: 'indexed PNG palette order' };
+                }
+
+                let grayscaleOk = true;
+                const bins = new Set();
+                for (const c of opaque) {
+                    if (!isGray(c.rgb)) { grayscaleOk = false; break; }
+                    const idx = grayIndex(c.rgb.r, hasTransparent);
+                    if (bins.has(idx)) { grayscaleOk = false; break; }
+                    bins.add(idx);
+                }
+                if (grayscaleOk) {
+                    palette.fill(RGBDS_TRANSPARENT);
+                    for (const c of opaque) palette[grayIndex(c.rgb.r, hasTransparent)] = c.cgb;
+                    return { palette, mode: 'RGBDS grayscale bins' };
+                }
+
+                opaque.sort((a, b) => luminance555(b.cgb) - luminance555(a.cgb));
+                let i = hasTransparent ? 1 : 0;
+                for (const c of opaque) palette[i++] = c.cgb;
+                return { palette, mode: 'RGBDS RGB luminance' };
+            }
+
+            function makeIndexPixels(decoded, palette) {
+                const indices = new Uint8Array(WIDTH * HEIGHT);
+                const lut = new Map();
+                for (let i = 0; i < 4; i++) {
+                    if (palette[i] !== RGBDS_UNUSED && palette[i] !== RGBDS_TRANSPARENT) lut.set(palette[i], i);
+                }
+                for (let i = 0, p = 0; i < WIDTH * HEIGHT; i++, p += 4) {
+                    const r = decoded.pixels[p], g = decoded.pixels[p + 1], b = decoded.pixels[p + 2], a = decoded.pixels[p + 3];
+                    if (alphaClass(a) === 'transparent') {
+                        indices[i] = 0;
+                        continue;
+                    }
+                    const cgb = cgb555(r, g, b);
+                    const idx = lut.get(cgb);
+                    if (idx === undefined) throw new Error(`Color RGB555=0x${cgb.toString(16)} missing from palette.`);
+                    indices[i] = idx;
+                }
+                return indices;
+            }
+
+            function encode2bpp(indices) {
+                const out = new Uint8Array(GFX_BYTES);
+                let o = 0;
+                for (let ty = 0; ty < TILES_Y; ty++) {
+                    for (let tx = 0; tx < TILES_X; tx++) {
+                        for (let y = 0; y < 8; y++) {
+                            let lo = 0, hi = 0;
+                            for (let x = 0; x < 8; x++) {
+                                const idx = indices[(ty * 8 + y) * WIDTH + (tx * 8 + x)] & 3;
+                                lo |= (idx & 1) << (7 - x);
+                                hi |= ((idx >> 1) & 1) << (7 - x);
+                            }
+                            out[o++] = lo;
+                            out[o++] = hi;
+                        }
+                    }
+                }
+                return out;
+            }
+
+            function encodePalPayload(palette) {
+                const out = new Uint8Array(8);
+                for (let i = 0; i < 4; i++) {
+                    const v = palette[i];
+                    out[i * 2] = v & 0xff;
+                    out[i * 2 + 1] = (v >> 8) & 0xff;
+                }
+                return out;
+            }
+
+            function encodePalRom(palette) {
+                const out = new Uint8Array(10);
+                out[0] = 0;
+                out[1] = 1;
+                out.set(encodePalPayload(palette), 2);
+                return out;
+            }
+
+            function renderPreview(indices, palette, canvas) {
+                const ctx = canvas.getContext('2d', { willReadFrequently: true });
+                const image = ctx.createImageData(WIDTH, HEIGHT);
+                for (let i = 0; i < indices.length; i++) {
+                    const v = palette[indices[i]];
+                    const o = i * 4;
+                    if (v === RGBDS_TRANSPARENT || v === RGBDS_UNUSED) {
+                        image.data[o] = 32; image.data[o + 1] = 32; image.data[o + 2] = 32; image.data[o + 3] = 255;
+                    } else {
+                        const c = cgbToRgb888(v);
+                        image.data[o] = Math.round(c.r);
+                        image.data[o + 1] = Math.round(c.g);
+                        image.data[o + 2] = Math.round(c.b);
+                        image.data[o + 3] = 255;
+                    }
+                }
+                ctx.putImageData(image, 0, 0);
+            }
+
+            async function analyzeFile(file) {
+                const decoded = await decodeImage(file);
+                const extracted = extractEffectiveColors(decoded);
+                const generated = generatePalette(decoded, extracted);
+                const indices = makeIndexPixels(decoded, generated.palette);
+                const gfx = encode2bpp(indices);
+                const pal = encodePalPayload(generated.palette);
+                const romPal = encodePalRom(generated.palette);
+                return { extracted, generated, indices, gfx, pal, romPal };
+            }
+
+            return { analyzeFile, renderPreview, cgbToRgb888, RGBDS_TRANSPARENT, RGBDS_UNUSED, GFX_BYTES };
+        })();
+
+        function patchRomBytes(romView, offset, bytes) {
+            if (!romView || offset + bytes.length > romView.length) {
+                console.warn('ROM patch out of range', offset, bytes.length, romView?.length);
+                return false;
+            }
+            romView.set(bytes, offset);
+            return true;
+        }
+
+        function applyPlayerPortraitToRom(romBuffer, portrait) {
+            if (!portrait) return romBuffer;
+            const view = romBuffer instanceof Uint8Array ? romBuffer : new Uint8Array(romBuffer);
+            patchRomBytes(view, ROM_PALETTE_CUSTOM1, portrait.romPal);
+            patchRomBytes(view, ROM_GFX_PLAYER, portrait.gfx);
+            return view.buffer === romBuffer ? romBuffer : view.buffer;
+        }
+
+        function applyOpponentPortraitToRom(romView, portrait) {
+            if (!portrait || !romView) return;
+            patchRomBytes(romView, ROM_PALETTE_CUSTOM2, portrait.romPal);
+            patchRomBytes(romView, ROM_GFX_OPPONENT, portrait.gfx);
+        }
+
+        function getLiveRomView() {
+            if (liveRomPtr && module) {
+                return makeWasmBuffer(liveRomPtr, liveRomSize);
+            }
+            if (currentRomBuffer) {
+                return new Uint8Array(currentRomBuffer instanceof ArrayBuffer ? currentRomBuffer : currentRomBuffer);
+            }
+            return null;
+        }
+
+        /** Tell the ROM about custom-avatar state in both WRAM and SRAM. */
+        async function setHasCustomAvatar(active) {
+            const value = active ? 1 : 0;
+
+            const wram = getWram();
+            if (wram) {
+                wram[OFFSET_HAS_CUSTOM_AVATAR] = value;
+            }
+
+            // Persist the same flag in SRAM bank 0 ($A000-$BFFF).
+            // BGB reports sHasCustomAvatar at SRA0:$A00B, so the
+            // corresponding byte in the exported SRAM buffer is $000B.
+            const sram = getEmulatorSramData();
+            if (!sram || sram.length <= OFFSET_SRAM_HAS_CUSTOM_AVATAR) return;
+
+            sram[OFFSET_SRAM_HAS_CUSTOM_AVATAR] = value;
+
+            const extRamFileNew = getExport('ext_ram_file_data_new');
+            const getFileDataPtr = getExport('get_file_data_ptr');
+            const getFileDataSize = getExport('get_file_data_size');
+            const readExtRam = getExport('emulator_read_ext_ram');
+            const fileDataDelete = getExport('file_data_delete');
+
+            if (!extRamFileNew || !getFileDataPtr || !getFileDataSize || !readExtRam || !fileDataDelete) return;
+
+            const fileDataPtr = extRamFileNew(emulatorPtr);
+            const bufPtr = getFileDataPtr(fileDataPtr);
+            const bufSize = getFileDataSize(fileDataPtr);
+
+            if (sram.length <= bufSize) {
+                makeWasmBuffer(bufPtr, bufSize).fill(0).set(sram);
+                readExtRam(emulatorPtr, fileDataPtr);
+            }
+            fileDataDelete(fileDataPtr);
+
+            // Keep browser SRAM storage in sync immediately instead of waiting
+            // for the periodic 5-second save.
+            await saveSramToStorage(sram);
+        }
+
+        function portraitToTransfer(portrait) {
+            if (!portrait) return null;
+            return {
+                pal: Array.from(portrait.pal),
+                gfx: Array.from(portrait.gfx),
+                romPal: Array.from(portrait.romPal)
+            };
+        }
+
+        function portraitFromTransfer(data) {
+            if (!data || !data.gfx || !data.romPal) return null;
+            if (data.gfx.length !== PORTRAIT_GFX_BYTES) return null;
+            if (data.romPal.length !== PORTRAIT_PAL_ROM_BYTES) return null;
+            return {
+                pal: new Uint8Array(data.pal || data.romPal.slice(2)),
+                gfx: new Uint8Array(data.gfx),
+                romPal: new Uint8Array(data.romPal)
+            };
+        }
+
+        const PORTRAIT_IDB_KEY = 'custom_player_portrait';
+
+        async function savePlayerPortraitToStorage(portrait) {
+            if (!portrait) {
+                try {
+                    const db = await openSaveDB();
+                    return new Promise((resolve) => {
+                        const tx = db.transaction(DB_STORE, 'readwrite');
+                        tx.objectStore(DB_STORE).delete(PORTRAIT_IDB_KEY);
+                        tx.oncomplete = () => resolve(true);
+                        tx.onerror = () => resolve(false);
+                    });
+                } catch (_) { return false; }
+            }
+            const payload = {
+                pal: Array.from(portrait.pal),
+                gfx: Array.from(portrait.gfx),
+                romPal: Array.from(portrait.romPal)
+            };
+            try {
+                const db = await openSaveDB();
+                return new Promise((resolve) => {
+                    const tx = db.transaction(DB_STORE, 'readwrite');
+                    tx.objectStore(DB_STORE).put(payload, PORTRAIT_IDB_KEY);
+                    tx.oncomplete = () => resolve(true);
+                    tx.onerror = () => resolve(false);
+                });
+            } catch (_) { return false; }
+        }
+
+        async function loadPlayerPortraitFromStorage() {
+            try {
+                const db = await openSaveDB();
+                return new Promise((resolve) => {
+                    const tx = db.transaction(DB_STORE, 'readonly');
+                    const req = tx.objectStore(DB_STORE).get(PORTRAIT_IDB_KEY);
+                    req.onsuccess = () => {
+                        const data = req.result;
+                        if (!data || !data.gfx || !data.romPal) { resolve(null); return; }
+                        if (data.gfx.length !== PORTRAIT_GFX_BYTES || data.romPal.length !== PORTRAIT_PAL_ROM_BYTES) {
+                            resolve(null); return;
+                        }
+                        resolve({
+                            pal: new Uint8Array(data.pal || data.romPal.slice(2)),
+                            gfx: new Uint8Array(data.gfx),
+                            romPal: new Uint8Array(data.romPal)
+                        });
+                    };
+                    req.onerror = () => resolve(null);
+                });
+            } catch (_) { return null; }
+        }
+
+        function updateAvatarUi(portrait, statusText, ok) {
+            const status = $('avatar-status');
+            const clearBtn = $('btn-clear-avatar');
+            const preview = $('avatar-preview');
+            const palEl = $('avatar-palette');
+            if (status) {
+                status.textContent = statusText || (portrait ? 'Custom avatar ready' : 'No custom avatar');
+                status.className = `text-[9px] mt-1 font-mono ${ok === false ? 'text-rose-400' : portrait ? 'text-emerald-400' : 'text-slate-500'}`;
+            }
+            if (clearBtn) clearBtn.disabled = !portrait;
+            if (palEl) {
+                palEl.innerHTML = '';
+                if (portrait) {
+                    for (let i = 0; i < 4; i++) {
+                        const lo = portrait.romPal[2 + i * 2];
+                        const hi = portrait.romPal[3 + i * 2];
+                        const v = lo | (hi << 8);
+                        const sw = document.createElement('div');
+                        sw.className = 'w-5 h-5 rounded border border-slate-600';
+                        if (v === PortraitCodec.RGBDS_TRANSPARENT || v === 0xffff) {
+                            sw.style.background = 'repeating-conic-gradient(#333 0 25%,#666 0 50%) 0/8px 8px';
+                        } else {
+                            const c = PortraitCodec.cgbToRgb888(v);
+                            sw.style.background = `rgb(${Math.round(c.r)},${Math.round(c.g)},${Math.round(c.b)})`;
+                        }
+                        palEl.appendChild(sw);
+                    }
+                }
+            }
+            if (preview && !portrait) {
+                const ctx = preview.getContext('2d');
+                ctx.fillStyle = '#000';
+                ctx.fillRect(0, 0, 48, 48);
+            }
+        }
+
+        async function handleAvatarFile(file) {
+            if (!file) return;
+            try {
+                if (file.type && file.type !== 'image/png' && !/\.png$/i.test(file.name)) {
+                    updateAvatarUi(null, 'PNG only', false);
+                    return;
+                }
+                const result = await PortraitCodec.analyzeFile(file);
+                const portrait = { pal: result.pal, gfx: result.gfx, romPal: result.romPal };
+                customPlayerPortrait = portrait;
+                await savePlayerPortraitToStorage(portrait);
+
+                // Patch live ROM from pristine original so we never stack writes on bad offsets
+                if (originalRomBuffer && liveRomPtr && module) {
+                    const fresh = new Uint8Array(originalRomBuffer.slice(0));
+                    applyPlayerPortraitToRom(fresh, portrait);
+                    makeWasmBuffer(liveRomPtr, liveRomSize).set(fresh.subarray(0, Math.min(fresh.length, liveRomSize)));
+                    currentRomBuffer = fresh.buffer;
+                } else if (originalRomBuffer) {
+                    const fresh = new Uint8Array(originalRomBuffer.slice(0));
+                    applyPlayerPortraitToRom(fresh, portrait);
+                    currentRomBuffer = fresh.buffer;
+                }
+                await setHasCustomAvatar(true);
+
+                PortraitCodec.renderPreview(result.indices, result.generated.palette, $('avatar-preview'));
+                const n = result.extracted.opaque.length + (result.extracted.hasTransparent ? 1 : 0);
+                updateAvatarUi(portrait, `OK · ${n} colors · ${result.generated.mode}`, true);
+                customPortraitSent = false;
+                addChatMessage('SYSTEM', 'Custom avatar saved — injected on boot and shared before duel.');
+            } catch (e) {
+                updateAvatarUi(customPlayerPortrait, e instanceof Error ? e.message : String(e), false);
+            }
+        }
+
+        function sendCustomPortraitIfNeeded() {
+            if (!connection?.open || !customPlayerPortrait || customPortraitSent) return;
+            const wram = getWram();
+            if (!wram || wram[OFFSET_PLAYER_AVATAR] !== COSTUM_PIC) return;
+
+            connection.send({
+                type: 'custom_portrait',
+                portrait: portraitToTransfer(customPlayerPortrait)
+            });
+            customPortraitSent = true;
+        }
+
+        function applyIncomingOpponentPortrait(data) {
+            const portrait = portraitFromTransfer(data);
+            if (!portrait) return;
+            const live = getLiveRomView();
+            if (live) applyOpponentPortraitToRom(live, portrait);
+            if (currentRomBuffer) {
+                const view = new Uint8Array(currentRomBuffer instanceof ArrayBuffer ? currentRomBuffer : currentRomBuffer);
+                applyOpponentPortraitToRom(view, portrait);
+            }
+            const wram = getWram();
+            if (wram) {
+                wram[OFFSET_OPPONENT_AVATAR] = LINK_OPP_PIC;
+                cachedOppAvatar = LINK_OPP_PIC;
+            }
+            addChatMessage('SYSTEM', 'Opponent custom avatar received and injected.');
+        }
+
+        // ============================================================
         // WRAM ACCESS & SAFE WRITING
         // ============================================================
         function getWram() {
@@ -1370,11 +1942,29 @@
             module = await Binjgb();
             wramCachedPtr = null;
 
-            const size = (romBuffer.byteLength + 0x7fff) & ~0x7fff;
+            // Keep a pristine copy; always apply portrait patches from the original ROM.
+            if (!originalRomBuffer || originalRomBuffer.byteLength !== romBuffer.byteLength) {
+                originalRomBuffer = romBuffer.slice ? romBuffer.slice(0) : new Uint8Array(romBuffer).buffer;
+            }
+            if (!customPlayerPortrait) {
+                customPlayerPortrait = await loadPlayerPortraitFromStorage();
+            }
+            let romBytes = new Uint8Array(originalRomBuffer.slice(0));
+            if (customPlayerPortrait) {
+                if (romBytes.length < ROM_GFX_PLAYER + PORTRAIT_GFX_BYTES) {
+                    console.error('ROM too small for custom portrait offsets (need bank 2E).');
+                } else {
+                    applyPlayerPortraitToRom(romBytes, customPlayerPortrait);
+                }
+            }
+
+            const size = (romBytes.byteLength + 0x7fff) & ~0x7fff;
             const malloc = getExport('malloc');
             const romDataPtr = malloc(size);
+            liveRomPtr = romDataPtr;
+            liveRomSize = size;
 
-            makeWasmBuffer(romDataPtr, size).fill(0).set(new Uint8Array(romBuffer));
+            makeWasmBuffer(romDataPtr, size).fill(0).set(romBytes);
 
             // Create the AudioContext BEFORE creating the emulator.
             // binjgb's reference implementation passes Audio.ctx.sampleRate
@@ -1419,7 +2009,7 @@
                 setupInput();
             }
 
-            currentRomBuffer = romBuffer;
+            currentRomBuffer = romBytes.buffer;
             currentSavBuffer = savBuffer;
             $('screen-start-overlay')?.classList.add('hidden');
             $('btn-reset-game')?.classList.remove('hidden');
@@ -1427,6 +2017,10 @@
             audio = new GameAudio(module, emulatorPtr, audioCtx);
             $('btn-download-sav').disabled = false;
             $('btn-save-now').disabled = false;
+
+            // Custom portrait data was already patched into the ROM above.
+            // The ROM owns wHasCustomAvatar / wPlayerPortrait after boot/reset.
+            customPortraitSent = false;
 
             const pLed = $('power-led');
             if (pLed) {
@@ -2047,8 +2641,9 @@
                         type: 'ready_sync',
                         step: p1,
                         avatar: avatar,
-                        name: rawName
+                        name: rawName,
                     });
+                    if (p1 >= 1) sendCustomPortraitIfNeeded();
                 }
             }
 
@@ -2065,12 +2660,13 @@
                     wram[OFFSET_SERIAL_OP] = (coinFlip === 0 ? 0x29 : 0x00);
                 }
 
+                sendCustomPortraitIfNeeded();
                 connection.send({
                     type: 'deck_exchange',
                     deck: myDeck,
                     rawName: myRawName,
                     avatar: myAvatar,
-                    firstPlayer: coinFlip
+                    firstPlayer: coinFlip,
                 });
             }
 
@@ -2351,15 +2947,15 @@
         const btnResetGame = $('btn-reset-game');
         if (btnResetGame) {
             btnResetGame.onclick = async () => {
-                if (!emulatorPtr || !currentRomBuffer) return;
+                if (!emulatorPtr || !originalRomBuffer) return;
                 const sram = getEmulatorSramData();
                 if (sram && sram.length > 0) {
                     await saveSramToStorage(sram);
                 }
                 const storedSram = await loadSramFromStorage();
                 const savBuf = storedSram ? storedSram.buffer : currentSavBuffer;
-                // Soft reset: rebuild emulator only. PeerJS connection stays open.
-                await initEmulator(currentRomBuffer, savBuf);
+                // Soft reset from pristine ROM (portrait re-applied inside initEmulator).
+                await initEmulator(originalRomBuffer, savBuf);
                 resetAllButtons();
                 resetLinkSyncState({ notifyPeer: true });
                 if (connection?.open) {
@@ -2406,6 +3002,47 @@
                 $('sav-status').innerHTML = `<span class="text-slate-400">Browser: Empty</span>`;
             }
         };
+
+        // Custom avatar UI
+        $('btn-customize-toggle')?.addEventListener('click', () => {
+            const panel = $('customize-panel');
+            if (!panel) return;
+            panel.classList.toggle('hidden');
+        });
+
+        const avatarDrop = $('avatar-drop');
+        const avatarInput = $('avatar-upload');
+        if (avatarDrop && avatarInput) {
+            avatarDrop.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                avatarDrop.classList.add('border-violet-400');
+            });
+            avatarDrop.addEventListener('dragleave', () => {
+                avatarDrop.classList.remove('border-violet-400');
+            });
+            avatarDrop.addEventListener('drop', (e) => {
+                e.preventDefault();
+                avatarDrop.classList.remove('border-violet-400');
+                handleAvatarFile(e.dataTransfer.files[0]);
+            });
+            avatarInput.addEventListener('change', (e) => handleAvatarFile(e.target.files[0]));
+        }
+
+        $('btn-clear-avatar')?.addEventListener('click', async () => {
+            customPlayerPortrait = null;
+            customPortraitSent = false;
+            await savePlayerPortraitToStorage(null);
+            await setHasCustomAvatar(false);
+            updateAvatarUi(null, 'No custom avatar', true);
+            addChatMessage('SYSTEM', 'Custom avatar cleared (wHasCustomAvatar = 0).');
+        });
+
+        (async () => {
+            customPlayerPortrait = await loadPlayerPortraitFromStorage();
+            if (customPlayerPortrait) {
+                updateAvatarUi(customPlayerPortrait, 'Loaded from browser storage', true);
+            }
+        })();
 
         autoDetectRom();
         initStorageStatus();
@@ -2535,6 +3172,7 @@
                 linkAlive = true;
                 setConnectionStatus('LINKED', 'text-green-500 font-bold uppercase');
                 addChatMessage('SYSTEM', 'Peer connection established.');
+                customPortraitSent = false;
 
                 const myName = getLocalPlayerName();
                 const rawName = readRawPlayerName();
@@ -2545,6 +3183,7 @@
                     name: myName,
                     rawName: rawName
                 });
+                sendCustomPortraitIfNeeded();
             });
 
             conn.on('data', d => {
@@ -2601,7 +3240,9 @@
                     const stepVal = d.step ?? d.ready;
                     const wram = getWram();
                     if (d.avatar !== undefined) {
-                        cachedOppAvatar = d.avatar;
+                        // Peer's local COSTUM_PIC maps to our LINK_OPP_PIC slot
+                        const mapped = (d.avatar === COSTUM_PIC) ? LINK_OPP_PIC : d.avatar;
+                        cachedOppAvatar = mapped;
                     }
                     if (d.name && Array.isArray(d.name)) {
                         cachedOppRawName = d.name.slice();
@@ -2610,7 +3251,8 @@
                         wram[OFFSET_P2_READY] = stepVal;
 
                         if (d.avatar !== undefined) {
-                            wram[OFFSET_OPPONENT_AVATAR] = d.avatar;
+                            const mapped = (d.avatar === COSTUM_PIC) ? LINK_OPP_PIC : d.avatar;
+                            wram[OFFSET_OPPONENT_AVATAR] = mapped;
                         }
                         if (d.name && Array.isArray(d.name)) {
                             writeOpponentNameBytes(d.name);
@@ -2630,8 +3272,12 @@
                             writeOpponentNameBytes(d.rawName);
                         }
                         if (d.avatar !== undefined) {
-                            cachedOppAvatar = d.avatar;
-                            wram[OFFSET_OPPONENT_AVATAR] = d.avatar;
+                            const mapped = (d.avatar === COSTUM_PIC) ? LINK_OPP_PIC : d.avatar;
+                            cachedOppAvatar = mapped;
+                            wram[OFFSET_OPPONENT_AVATAR] = mapped;
+                        }
+                        if (d.portrait) {
+                            applyIncomingOpponentPortrait(d.portrait);
                         }
 
                         if (!isHost && d.firstPlayer !== null && d.firstPlayer !== undefined) {
@@ -2642,6 +3288,11 @@
                             addChatMessage('SYSTEM', 'Match starting!');
                         }
                     }
+                    return;
+                }
+
+                if (d.type === 'custom_portrait') {
+                    if (d.portrait) applyIncomingOpponentPortrait(d.portrait);
                     return;
                 }
 
